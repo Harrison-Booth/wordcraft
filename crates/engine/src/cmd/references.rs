@@ -1020,18 +1020,18 @@ pub fn update_fields_in(s: &mut Session, all: bool) -> Result<(), CmdError> {
         let mut updates: Vec<(usize, String)> = Vec::new();
         for (k, o) in p.objects.iter().enumerate() {
             let InlineObject::Field { instr, locked: false, .. } = o else { continue };
-            // A table formula reads the cells around its own cell again.
+            // A formula reads the cells around its own cell again; outside a table it is worked
+            // out on its own, and ABOVE, LEFT, RIGHT and BELOW are an error, as in Word.
             if instr.trim_start().starts_with('=') {
-                if let Some((tp, r, c)) = path.cell()
-                    && let Some(t) = s.doc.table(StoryRef::Body, &tp)
-                {
-                    let default_lang = super::default_lang(s);
-                    let text = match super::table_formula::evaluate_field_with(t, Some(&s.doc), default_lang.as_deref(), r, c, instr) {
-                        Ok(text) => text,
-                        Err(e) => format!("!{e}"),
-                    };
-                    updates.push((k, text));
-                }
+                let default_lang = super::default_lang(s);
+                let text = match path.cell().and_then(|(tp, r, c)| s.doc.table(StoryRef::Body, &tp).map(|t| (t, r, c))) {
+                    Some((t, r, c)) => super::table_formula::evaluate_field_with(t, Some(&s.doc), default_lang.as_deref(), r, c, instr),
+                    None if super::table_formula::names_a_cell_direction(instr) => Ok("!The Formula Not In Table".to_string()),
+                    None => {
+                        super::table_formula::evaluate_field_with(&wordcraft_doc::Table::new(1, 1, 0.0), None, default_lang.as_deref(), 0, 0, instr)
+                    }
+                };
+                updates.push((k, text.unwrap_or_else(|e| format!("!{e}"))));
                 continue;
             }
             let name = wordcraft_layout::fields::field_name(instr);
@@ -1682,6 +1682,33 @@ mod tests {
         let got: Vec<String> = fields(&s).into_iter().map(|(_, r)| r).collect();
         let name = s.resolved_filenames().0.to_lowercase();
         assert_eq!(got, ["BOOKMARK TARGET TEXT".to_string(), "one".into(), "First".into(), name]);
+    }
+
+    /// A formula field outside a table is worked out on its own. Results as Word 16.0 (build
+    /// 16.0.20527) showed them for the same codes in a body paragraph on 2026-10-26.
+    #[test]
+    fn body_formulas_are_calculated() {
+        let mut s = Session::new(wordcraft_doc::Document::from_text("Total:"));
+        s.run("caret.docEnd", &json!({})).unwrap();
+        let cases = [
+            ("= 1+1", "2"),
+            ("=1+1", "2"),
+            ("= 2*3", "6"),
+            ("=SUM(1,2)", "3"),
+            (r"= 790 \* CardText", "seven hundred ninety"),
+            (r"=SUM(1,2) \* CardText \* Caps", "Three"),
+            (r#"=1/3 \# "0.000""#, "0.333"),
+            ("=MOD(10,3)", "1"),
+            (r"=5 \* ROMAN", "V"),
+            ("=SUM(ABOVE)", "!The Formula Not In Table"),
+            ("=SUM(LEFT)", "!The Formula Not In Table"),
+        ];
+        for (instr, _) in cases {
+            s.run("insert.field", &json!({"instr": instr, "result": "7"})).unwrap();
+        }
+        update_fields(&mut s).unwrap();
+        let got: Vec<String> = fields(&s).into_iter().map(|(_, r)| r).collect();
+        assert_eq!(got, cases.map(|(_, shown)| shown.to_string()));
     }
 
     /// A count the field's number format cannot write shows Word's error text.

@@ -122,6 +122,13 @@ fn format_switches(switches: &str, value: f64, text: String) -> String {
     }
 }
 
+/// Whether a formula names ABOVE, LEFT, RIGHT or BELOW (outside quotes), which only mean
+/// something in a table.
+pub(crate) fn names_a_cell_direction(instr: &str) -> bool {
+    let (formula, _) = split_switch(instr);
+    formula.split(|c: char| !c.is_ascii_alphabetic()).any(|w| ["ABOVE", "LEFT", "RIGHT", "BELOW"].iter().any(|d| w.eq_ignore_ascii_case(d)))
+}
+
 /// Splits a field's switches (`\#` and `\*`) off its formula: `=SUM(ABOVE) \# "0.00"` gives the
 /// formula and the switch text (from the first switch on).
 pub fn split_switch(instr: &str) -> (&str, Option<&str>) {
