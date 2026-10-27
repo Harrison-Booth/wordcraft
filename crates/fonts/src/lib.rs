@@ -19,7 +19,7 @@ pub use fontdb::{
     base_style, bundled, decode_font_file, is_font_file_name, name_language_matches, sniff, system_font_dirs,
 };
 pub use harfrust::Feature;
-use harfrust::{Direction, ShapeOptions, Tag, UnicodeBuffer};
+use harfrust::{Buffer, Direction, ShapeOptions, ShaperFont, Tag};
 pub use kurbo::BezPath;
 pub use script::{fallback_rank, is_emoji, needs_layout_tables, script_fallbacks};
 use skrifa::MetadataProvider;
@@ -206,32 +206,34 @@ pub fn shape_run(face: &FontFace, text: &str, features: &[Feature], map: impl Fn
 
 fn shape_dir(face: &FontFace, text: &str, features: &[Feature], map: &impl Fn(char) -> char, rtl: bool) -> Vec<ShapedGlyph> {
     let mut out = Vec::with_capacity(text.len());
-    let shaped = face.hb().map(|hb| {
-        let shaper = face.shaper.shaper(&hb).instance(face.instance.as_ref()).build();
-        // One script per shaping call: the shaper picks its script engine (Myanmar, Khmer,
-        // Indic, USE reordering…) from the run's script, so "Hi မြန်မာ" in one face must not be
-        // shaped as Latin. Runs come in text order; right-to-left callers regroup by cluster.
-        for r in script::script_runs(text) {
-            let Some(sub) = text.get(r.clone()) else { continue };
-            let mut buf = UnicodeBuffer::new();
-            for (i, c) in sub.char_indices() {
-                buf.add(map(c), (r.start + i) as u32);
-            }
-            buf.guess_segment_properties();
-            buf.set_direction(if rtl { Direction::RightToLeft } else { Direction::LeftToRight });
-            let gb = shaper.shape(buf, ShapeOptions::new().features(features));
-            for (info, pos) in gb.glyph_infos().iter().zip(gb.glyph_positions()) {
-                out.push(ShapedGlyph {
-                    gid: info.glyph_id,
-                    cluster: info.cluster as usize,
-                    x_advance: pos.x_advance,
-                    x_offset: pos.x_offset,
-                    y_offset: pos.y_offset,
-                });
-            }
+    let sf = ShaperFont::new(&face.hb);
+    // One script per shaping call: the shaper picks its script engine (Myanmar, Khmer,
+    // Indic, USE reordering…) from the run's script, so "Hi မြန်မာ" in one face must not be
+    // shaped as Latin. Runs come in text order; right-to-left callers regroup by cluster.
+    let mut shaped = false;
+    for r in script::script_runs(text) {
+        let Some(sub) = text.get(r.clone()) else { continue };
+        let mut buf = Buffer::new();
+        for (i, c) in sub.char_indices() {
+            buf.push(map(c) as u32, (r.start + i) as u32);
         }
-    });
-    if shaped.is_none()
+        buf.guess_segment_properties();
+        buf.set_direction(if rtl { Direction::RightToLeft } else { Direction::LeftToRight });
+        if harfrust::shape(&sf, &mut buf, ShapeOptions::new().features(features)).is_err() {
+            continue;
+        }
+        shaped = true;
+        for (info, pos) in buf.glyph_infos().iter().zip(buf.glyph_positions()) {
+            out.push(ShapedGlyph {
+                gid: info.glyph_id,
+                cluster: info.cluster as usize,
+                x_advance: pos.x_advance,
+                x_offset: pos.x_offset,
+                y_offset: pos.y_offset,
+            });
+        }
+    }
+    if !shaped
         && let Some(f) = face.skrifa()
     {
         let cmap = f.charmap();
