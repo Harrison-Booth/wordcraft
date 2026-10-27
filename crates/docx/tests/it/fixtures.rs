@@ -1734,6 +1734,45 @@ fn ole_object_round_trips() {
     assert!(matches!(paras(&back)[0].objects.first(), Some(InlineObject::Image { w: 144.0, ole: Some(_), .. })));
 }
 
+/// #3597: an ActiveX control has no picture; it is drawn as a box and written back with its parts.
+#[test]
+fn activex_control_round_trips() {
+    let body = r##"<w:p><w:r><w:object><v:shape id="control_shape_1" o:allowincell="t" style="width:11.05pt;height:7.3pt" type="#_x0000_t75"></v:shape><w:control r:id="rId3" w:name="CheckBox1" w:shapeid="control_shape_1"/></w:object></w:r></w:p>"##;
+    let ax = r#"<ax:ocx xmlns:ax="http://schemas.microsoft.com/office/2006/activeX" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" ax:classid="{8BD21D40-EC42-11CE-9E0D-00AA006002F3}" ax:persistence="persistStorage" r:id="rId1"/>"#;
+    let ax_rels = r#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.microsoft.com/office/2006/relationships/activeXControlBinary" Target="activeX1.bin"/></Relationships>"#;
+    let types = r#"<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="bin" ContentType="application/vnd.ms-office.activeX"/><Override PartName="/word/activeX/activeX1.xml" ContentType="application/vnd.ms-office.activeX+xml"/></Types>"#;
+    let bytes = docx(
+        body,
+        &[("rId3", "control", "activeX/activeX1.xml")],
+        &[
+            ("[Content_Types].xml", types),
+            ("word/activeX/activeX1.xml", ax),
+            ("word/activeX/_rels/activeX1.xml.rels", ax_rels),
+            ("word/activeX/activeX1.bin", "opaque control state"),
+        ],
+    );
+    let d = wordcraft_docx::read(&bytes).unwrap();
+    let Some(InlineObject::Shape { w, h, extra, .. }) = paras(&d)[0].objects.first() else { panic!("{:?}", paras(&d)[0].objects) };
+    assert_eq!((*w, *h), (11.05, 7.3), "drawn at the shape's size");
+    assert!(extra.ole.is_some());
+
+    let out = wordcraft_docx::write(&d).unwrap();
+    let files = unzip(&out);
+    let body = text(&files, "word/document.xml");
+    assert_eq!(body.matches("<w:control ").count(), 1, "{body}");
+    let [id] = attr_values(&body, "w:control", "r:id").try_into().unwrap();
+    let (kind, target) = rel(&text(&files, "word/_rels/document.xml.rels"), &id);
+    assert!(kind.ends_with("/control"), "{kind}");
+    let part = part_at("word", &target);
+    assert_eq!(files.get(&part).map(Vec::as_slice), Some(ax.as_bytes()));
+    let bin = files.keys().find(|k| k.ends_with(".bin")).expect("the control's binary part");
+    assert_eq!(files.get(bin).map(Vec::as_slice), Some(b"opaque control state".as_slice()));
+    assert!(text(&files, "[Content_Types].xml").contains("application/vnd.ms-office.activeX+xml"));
+
+    let back = wordcraft_docx::read(&out).unwrap();
+    assert!(matches!(paras(&back)[0].objects.first(), Some(InlineObject::Shape { extra, .. }) if extra.ole.is_some()));
+}
+
 #[test]
 fn an_unqualified_relationship_attribute_round_trips() {
     // A producer that left the relationship prefix out: the VML picture names its image with an

@@ -332,15 +332,39 @@ impl Reader<'_> {
     pub(super) fn read_object(&mut self, sc: &mut StoryCtx, obj: &El, rels: &Rels) -> Option<InlineObject> {
         let mut o = match self.read_vml(sc, obj, rels) {
             Some(o) => o,
-            None => {
-                let d = obj.child("w:drawing")?;
-                self.read_drawing(sc, d, rels)?
-            }
+            None => match obj.child("w:drawing") {
+                Some(d) => self.read_drawing(sc, d, rels)?,
+                None => return self.read_control(sc, obj, rels),
+            },
         };
         if let InlineObject::Image { ole, .. } = &mut o {
             *ole = self.keep_embedded(obj, rels, &[]);
         }
         Some(o)
+    }
+
+    /// An ActiveX control (`w:object` with a `w:control`, ECMA-376 §17.3.3.19): usually it has no
+    /// picture, so it is drawn as an empty box of its VML shape's size, and kept whole so saving
+    /// writes the control and its `activeX` parts back.
+    fn read_control(&mut self, sc: &mut StoryCtx, obj: &El, rels: &Rels) -> Option<InlineObject> {
+        obj.child("w:control")?;
+        let shape = obj.child("v:shape")?;
+        let style = shape.attr("style").unwrap_or("");
+        let len = |k: &str| vml_style(style, k).and_then(|v| measure(v, 1.0)).unwrap_or(0.0).clamp(0.0, crate::units::MAX_LEN_PT);
+        let ole = self.keep_embedded(obj, rels, &[])?;
+        Some(InlineObject::Shape {
+            kind: ShapeKind::Rectangle,
+            w: len("width"),
+            h: len("height"),
+            fill: Some(wordcraft_doc::fill::Fill::solid(Rgb::WHITE)),
+            stroke: Some(Rgb::BLACK),
+            stroke_width: 0.75,
+            float: vml_float(shape, style, sc.in_hf),
+            story: None,
+            freeform: None,
+            effects: Default::default(),
+            extra: ShapeExtra { ole: Some(ole), ..Default::default() },
+        })
     }
 
     /// A Word signature line (Insert › Signature Line): a `w:pict` whose one VML picture carries
