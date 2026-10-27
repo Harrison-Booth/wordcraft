@@ -415,6 +415,11 @@ fn run<S: AsRef<OsStr>>(args: &[S]) -> Result<(), Failure> {
             let markup = rest.iter().any(|a| a == "--markup");
             let password = password_from(&rest)?;
             let mut s = open(&i, password.as_deref())?;
+            for (word, used) in wordcraft_fonts::word::missing_metric_fonts() {
+                eprintln!(
+                    "note: {word} and its metric-compatible twins aren't installed; drawing it in {used}, so lines and pages may not match Word's"
+                );
+            }
             if rest.iter().any(|a| a == "--update-fields") {
                 s.run("references.updateFields", &json!({})).map_err(|e| e.to_string())?;
             }

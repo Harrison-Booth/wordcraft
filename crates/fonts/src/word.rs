@@ -360,6 +360,28 @@ fn substitute(db: &FontDb, family: &str) -> Option<&'static str> {
         .or_else(|| installed.first().copied())
 }
 
+/// Word's core families, each with the open fonts that share its metrics. Without the family or
+/// a twin, text set in it wraps and paginates differently from Word (Times New Roman drawn in a
+/// wider serif fits fewer lines to a page).
+const METRIC_TWINS: &[(&str, &[&str])] = &[
+    ("Times New Roman", &["Liberation Serif", "Tinos"]),
+    ("Arial", &["Liberation Sans", "Arimo"]),
+    ("Courier New", &["Liberation Mono", "Cousine"]),
+    ("Calibri", &["Carlito"]),
+    ("Cambria", &["Caladea"]),
+];
+
+/// The Word core families with neither the font nor a metric-compatible twin installed, each with
+/// the family drawn in its place: lines and pages measured with those won't match Word's.
+pub fn missing_metric_fonts() -> Vec<(&'static str, &'static str)> {
+    let db = FontDb::global();
+    METRIC_TWINS
+        .iter()
+        .filter(|(word, twins)| !db.has_family(word) && !twins.iter().any(|t| db.has_family(t)))
+        .map(|(word, _)| (*word, substitute(db, word).unwrap_or(crate::FALLBACK_FAMILY)))
+        .collect()
+}
+
 fn style_name(bold: bool, italic: bool) -> &'static str {
     match (bold, italic) {
         (false, false) => "Regular",
@@ -693,5 +715,17 @@ mod tests {
         for f in ["No Such Brand Font", "Cambria", "Georgia", "Brand Serif"] {
             assert!(!has_named_substitutes(f), "{f}");
         }
+    }
+
+    #[test]
+    fn a_missing_core_font_is_reported_only_without_a_metric_twin() {
+        let db = FontDb::global();
+        let missing = missing_metric_fonts();
+        for (word, twins) in METRIC_TWINS {
+            let reported = missing.iter().any(|(w, _)| w == word);
+            let covered = db.has_family(word) || twins.iter().any(|t| db.has_family(t));
+            assert_eq!(reported, !covered, "{word}");
+        }
+        assert!(missing.iter().all(|(_, used)| db.has_family(used)));
     }
 }
