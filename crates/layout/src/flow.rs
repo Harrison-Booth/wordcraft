@@ -194,6 +194,7 @@ fn place_para_in_flow(ctx: &mut Ctx, pb: &mut PageBuilder, p: &Paragraph, block:
             if here != rel {
                 wrap_relays += 1;
                 ctx.fields.page = laid_page;
+                ctx.fields.page_format = pb.sect.page_num_format;
                 #[cfg(test)]
                 WRAP_RELAYS.with(|c| c.set(c.get() + 1));
                 let relaid =
@@ -224,6 +225,7 @@ fn place_para_in_flow(ctx: &mut Ctx, pb: &mut PageBuilder, p: &Paragraph, block:
             page_relays += 1;
             page_map.push((resume, pb.number));
             ctx.fields.page = laid_page;
+            ctx.fields.page_format = pb.sect.page_num_format;
             let relaid =
                 with_page_map(ctx, &mut page_map, |ctx| again(ctx, eq_start, |ctx| ctx.para_labelled(p, laid_width, None, &rel, label.clone())));
             match relaid.lines.iter().position(|l| l.start == resume) {
@@ -239,6 +241,7 @@ fn place_para_in_flow(ctx: &mut Ctx, pb: &mut PageBuilder, p: &Paragraph, block:
         }
         // What is laid out for these lines from here (their footnotes) is on this page.
         ctx.fields.page = pb.number;
+        ctx.fields.page_format = pb.sect.page_num_format;
         // How many lines fit?
         let Some(first) = pl.lines.get(l0) else { break };
         // A paragraph's first line may start below its top (pushed down by a floating object).
@@ -548,6 +551,7 @@ pub(crate) fn place_outline_para(ctx: &mut Ctx, pb: &mut PageBuilder, p: &Paragr
     let width = (pb.col_w() - indent - outline::SYMBOL_W).max(72.0);
     let q = outline::outline_para(ctx.doc, p, o.view.plain);
     ctx.fields.page = pb.number;
+    ctx.fields.page_format = pb.sect.page_num_format;
     let pl = ctx.para_labelled(&q, width, None, &[], label);
     pb.y += pl.rp.space_before.max(0.0);
     let n = pl.lines.len();

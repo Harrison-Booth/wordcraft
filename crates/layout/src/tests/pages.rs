@@ -612,3 +612,24 @@ fn a_page_ends_when_a_multiple_spaced_lines_text_no_longer_fits() {
         assert!(past_margin > 0, "{multiple}: some shift should leave the last line's leading past the margin");
     }
 }
+
+/// A body PAGE field shows the page number in the section's number format, as Word does (a
+/// cardinal-text section shows "one"), and `\*` overrides it.
+#[test]
+fn body_page_field_uses_the_section_number_format() {
+    let mut d = Document::from_text("Page \nPage ");
+    d.last_section.page_num_format = wordcraft_doc::section::NumFormat::CardinalText;
+    for (i, instr) in ["PAGE", "PAGE \\* Upper"].into_iter().enumerate() {
+        let p = d.para_mut(StoryRef::Body, &Path::top(i)).unwrap();
+        let off = p.len();
+        let field = InlineObject::Field { instr: instr.into(), result: "1".into(), locked: false, dirty: false, code: false, form: String::new() };
+        p.insert_object(off, field, &Default::default()).unwrap();
+    }
+    let l = lay(&d);
+    let shown: Vec<String> = l.pages[0]
+        .items
+        .iter()
+        .filter_map(|it| if let Placed::Lines { para, .. } = it { Some(para.shown.iter().map(|x| x.1.clone()).collect::<String>()) } else { None })
+        .collect();
+    assert_eq!(shown, ["one", "ONE"], "{shown:?}");
+}
