@@ -966,6 +966,7 @@ pub(crate) fn works_without_document(id: &str) -> bool {
             | "file.open"
             | "file.close"
             | "file.options"
+            | "help.reportIssue"
             | "file.setAuthor"
             | "font.add"
             | "font.list"
