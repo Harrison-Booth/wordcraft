@@ -212,7 +212,6 @@ fn shape_dir(face: &FontFace, text: &str, features: &[Feature], map: &impl Fn(ch
     // One script per shaping call: the shaper picks its script engine (Myanmar, Khmer,
     // Indic, USE reordering…) from the run's script, so "Hi မြန်မာ" in one face must not be
     // shaped as Latin. Runs come in text order; right-to-left callers regroup by cluster.
-    let mut shaped = false;
     for r in script::script_runs(text) {
         let Some(sub) = text.get(r.clone()) else { continue };
         let mut buf = Buffer::new();
@@ -222,10 +221,11 @@ fn shape_dir(face: &FontFace, text: &str, features: &[Feature], map: &impl Fn(ch
         buf.guess_segment_properties();
         buf.set_direction(if rtl { Direction::RightToLeft } else { Direction::LeftToRight });
         let plan = shape_plan(face, &buf, features);
-        if harfrust::shape(&sf, &mut buf, ShapeOptions::new().plan(plan.as_deref()).features(features)).is_err() {
+        // A run that exhausts the shaper's budget returns Ok with an incomplete buffer.
+        if harfrust::shape(&sf, &mut buf, ShapeOptions::new().plan(plan.as_deref()).features(features)).is_err() || !buf.allocation_successful() {
+            cmap_glyphs(face, sub, r.start, map, &mut out);
             continue;
         }
-        shaped = true;
         for (info, pos) in buf.glyph_infos().iter().zip(buf.glyph_positions()) {
             out.push(ShapedGlyph {
                 gid: info.glyph_id,
@@ -236,16 +236,19 @@ fn shape_dir(face: &FontFace, text: &str, features: &[Feature], map: &impl Fn(ch
             });
         }
     }
-    if !shaped && let Some(f) = face.skrifa() {
-        let cmap = f.charmap();
-        let gm = f.glyph_metrics(Size::unscaled(), face.location());
-        for (i, c) in text.char_indices() {
-            let g = cmap.map(map(c)).unwrap_or_default();
-            let adv = gm.advance_width(g).unwrap_or(face.upem as f32 * 0.5);
-            out.push(ShapedGlyph { gid: g.to_u32(), cluster: i, x_advance: adv.round() as i32, x_offset: 0, y_offset: 0 });
-        }
-    }
     out
+}
+
+/// One glyph per character straight from the cmap, for a run the shaper could not do.
+fn cmap_glyphs(face: &FontFace, text: &str, base: usize, map: &impl Fn(char) -> char, out: &mut Vec<ShapedGlyph>) {
+    let Some(f) = face.skrifa() else { return };
+    let cmap = f.charmap();
+    let gm = f.glyph_metrics(Size::unscaled(), face.location());
+    for (i, c) in text.char_indices() {
+        let g = cmap.map(map(c)).unwrap_or_default();
+        let adv = gm.advance_width(g).unwrap_or(face.upem as f32 * 0.5);
+        out.push(ShapedGlyph { gid: g.to_u32(), cluster: base + i, x_advance: adv.round() as i32, x_offset: 0, y_offset: 0 });
+    }
 }
 
 /// How many shape plans each thread keeps: the oldest is dropped to make room, so a thread never
@@ -411,6 +414,17 @@ mod tests {
             assert!(kept_shape_plans() <= MAX_SHAPE_PLANS, "{}", kept_shape_plans());
         }
         assert_eq!(kept_shape_plans(), MAX_SHAPE_PLANS);
+    }
+
+    /// The cmap fallback for a failed run gives one glyph per character, its clusters offset by
+    /// where the run starts in the text.
+    #[test]
+    fn cmap_fallback_keeps_cluster_offsets() {
+        let face = FontDb::global().face(DEFAULT_FAMILY, "Regular");
+        let mut out = Vec::new();
+        cmap_glyphs(&face, "ab", 5, &|c| c, &mut out);
+        assert_eq!(out.iter().map(|g| g.cluster).collect::<Vec<_>>(), [5, 6]);
+        assert!(out.iter().all(|g| g.gid != 0 && g.x_advance > 0));
     }
 
     #[test]
