@@ -1749,20 +1749,32 @@ fn ole_object_round_trips() {
 /// #3597: an ActiveX control has no picture; it is drawn as a box and written back with its parts.
 #[test]
 fn activex_control_round_trips() {
-    activex_round_trip(r##"type="#_x0000_t75""##);
+    activex_round_trip(r##"<v:shape id="control_shape_1" o:allowincell="t" style="width:11.05pt;height:7.3pt" type="#_x0000_t75"></v:shape>"##);
 }
 
 /// The same when the control's VML shape is a recognised preset (a rectangle, type 1), which
 /// the VML reader would otherwise turn into a plain shape and drop the control.
 #[test]
 fn activex_control_with_a_preset_shape_round_trips() {
-    activex_round_trip(r##"type="#_x0000_t1" stroked="t" strokecolor="black""##);
+    activex_round_trip(
+        r##"<v:shape id="control_shape_1" o:allowincell="t" style="width:11.05pt;height:7.3pt" type="#_x0000_t1" stroked="t" strokecolor="black"></v:shape>"##,
+    );
 }
 
-fn activex_round_trip(shape_attrs: &str) {
-    let body = format!(
-        r##"<w:p><w:r><w:object><v:shape id="control_shape_1" o:allowincell="t" style="width:11.05pt;height:7.3pt" {shape_attrs}></v:shape><w:control r:id="rId3" w:name="CheckBox1" w:shapeid="control_shape_1"/></w:object></w:r></w:p>"##
+/// A control takes the VML shape it names (`w:shapeid`), not the first shape in its object, and
+/// saving resizes that shape only: the other keeps its geometry.
+#[test]
+fn activex_control_takes_the_shape_it_names() {
+    let body = activex_round_trip(
+        r##"<v:shape id="other_shape" style="width:50pt;height:20pt"></v:shape><v:shape id="control_shape_1" o:allowincell="t" style="width:11.05pt;height:7.3pt" type="#_x0000_t75"></v:shape>"##,
     );
+    assert_eq!(attr_values(&body, "v:shape", "style")[0], "width:50pt;height:20pt", "{body}");
+}
+
+/// Reads the control in `shapes` and writes it back; returns the written document body.
+fn activex_round_trip(shapes: &str) -> String {
+    let body =
+        format!(r##"<w:p><w:r><w:object>{shapes}<w:control r:id="rId3" w:name="CheckBox1" w:shapeid="control_shape_1"/></w:object></w:r></w:p>"##);
     let ax = r#"<ax:ocx xmlns:ax="http://schemas.microsoft.com/office/2006/activeX" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" ax:classid="{8BD21D40-EC42-11CE-9E0D-00AA006002F3}" ax:persistence="persistStorage" r:id="rId1"/>"#;
     let ax_rels = r#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.microsoft.com/office/2006/relationships/activeXControlBinary" Target="activeX1.bin"/></Relationships>"#;
     let types = r#"<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="bin" ContentType="application/vnd.ms-office.activeX"/><Override PartName="/word/activeX/activeX1.xml" ContentType="application/vnd.ms-office.activeX+xml"/></Types>"#;
@@ -1790,12 +1802,17 @@ fn activex_round_trip(shape_attrs: &str) {
     assert!(kind.ends_with("/control"), "{kind}");
     let part = part_at("word", &target);
     assert_eq!(files.get(&part).map(Vec::as_slice), Some(ax.as_bytes()));
-    let bin = files.keys().find(|k| k.ends_with(".bin")).expect("the control's binary part");
-    assert_eq!(files.get(bin).map(Vec::as_slice), Some(b"opaque control state".as_slice()));
+    // The control's binary is the target of its own `r:id`, in the part's relationships.
+    let (dir, file) = part.rsplit_once('/').expect("a part in a folder");
+    let [bin_id] = attr_values(ax, "ax:ocx", "r:id").try_into().unwrap();
+    let (kind, bin_target) = rel(&text(&files, &format!("{dir}/_rels/{file}.rels")), &bin_id);
+    assert!(kind.ends_with("/activeXControlBinary"), "{kind}");
+    assert_eq!(files.get(&part_at(dir, &bin_target)).map(Vec::as_slice), Some(b"opaque control state".as_slice()));
     assert!(text(&files, "[Content_Types].xml").contains("application/vnd.ms-office.activeX+xml"));
 
     let back = wordcraft_docx::read(&out).unwrap();
     assert!(matches!(paras(&back)[0].objects.first(), Some(InlineObject::Shape { extra, .. }) if extra.ole.is_some()));
+    body
 }
 
 #[test]

@@ -399,7 +399,9 @@ impl super::Writer<'_> {
         }
         set_rel_ids(&mut root, &ids, 0);
         if let Some((w, h, float, alt)) = resize {
-            self.resize_object(&mut root, w, h, float, alt, 0);
+            // An ActiveX control's size goes to its own VML shape only; another shape keeps its geometry.
+            let only = root.child("w:control").and_then(|c| c.attr("w:shapeid")).map(str::to_string);
+            self.resize_object(&mut root, w, h, float, alt, only.as_deref(), 0);
         }
         Some(root)
     }
@@ -480,12 +482,12 @@ impl super::Writer<'_> {
     /// Write an OLE object's size (and position, when floating), rotation and flips into its VML
     /// shape and DrawingML picture, with the effect extent covering the rotated bounds as for
     /// other drawings, its alt text into both, and give its drawing a fresh `wp:docPr` id.
-    fn resize_object(&mut self, e: &mut El, w: f32, h: f32, float: &Float, alt: &str, depth: usize) {
+    fn resize_object(&mut self, e: &mut El, w: f32, h: f32, float: &Float, alt: &str, only: Option<&str>, depth: usize) {
         if depth > MAX_DEPTH {
             return;
         }
         match e.name.as_str() {
-            "v:shape" => {
+            "v:shape" if only.is_none_or(|id| e.attr("id") == Some(id)) => {
                 if let Some((_, style)) = e.attrs.iter_mut().find(|(k, _)| k == "style") {
                     *style = vml_style_with(style, w, h, float);
                 }
@@ -534,7 +536,7 @@ impl super::Writer<'_> {
         }
         for k in e.kids.iter_mut() {
             if let xml::Node::El(c) = k {
-                self.resize_object(c, w, h, float, alt, depth + 1);
+                self.resize_object(c, w, h, float, alt, only, depth + 1);
             }
         }
     }

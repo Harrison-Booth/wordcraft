@@ -365,11 +365,19 @@ impl Reader<'_> {
     /// picture, so it is drawn as an empty box of its VML shape's size, and kept whole so saving
     /// writes the control and its `activeX` parts back.
     fn read_control(&mut self, sc: &mut StoryCtx, obj: &El, rels: &Rels) -> Option<InlineObject> {
-        obj.child("w:control")?;
-        let shape = obj.child("v:shape")?;
+        let control = obj.child("w:control")?;
+        // The shape the control names by `w:shapeid`; the first one when it names none.
+        let id = control.attr("w:shapeid");
+        let Some(shape) = obj.children("v:shape").find(|s| id.is_none_or(|id| s.attr("id") == Some(id))) else {
+            log::warn!("docx: an ActiveX control has no VML shape; it is left out");
+            return None;
+        };
         let style = shape.attr("style").unwrap_or("");
         let len = |k: &str| vml_style(style, k).and_then(|v| measure(v, 1.0)).unwrap_or(0.0).clamp(0.0, crate::units::MAX_LEN_PT);
-        let ole = self.keep_embedded(obj, rels, &[])?;
+        let Some(ole) = self.keep_embedded(obj, rels, &[]) else {
+            log::warn!("docx: an ActiveX control's parts can't be kept; it is left out");
+            return None;
+        };
         Some(InlineObject::Shape {
             kind: ShapeKind::Rectangle,
             w: len("width"),
