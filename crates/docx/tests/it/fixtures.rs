@@ -1737,12 +1737,25 @@ fn ole_object_round_trips() {
 /// #3597: an ActiveX control has no picture; it is drawn as a box and written back with its parts.
 #[test]
 fn activex_control_round_trips() {
-    let body = r##"<w:p><w:r><w:object><v:shape id="control_shape_1" o:allowincell="t" style="width:11.05pt;height:7.3pt" type="#_x0000_t75"></v:shape><w:control r:id="rId3" w:name="CheckBox1" w:shapeid="control_shape_1"/></w:object></w:r></w:p>"##;
+    activex_round_trip(r##"type="#_x0000_t75""##);
+}
+
+/// The same when the control's VML shape is a recognised preset (a rectangle, type 1), which
+/// the VML reader would otherwise turn into a plain shape and drop the control.
+#[test]
+fn activex_control_with_a_preset_shape_round_trips() {
+    activex_round_trip(r##"type="#_x0000_t1" stroked="t" strokecolor="black""##);
+}
+
+fn activex_round_trip(shape_attrs: &str) {
+    let body = format!(
+        r##"<w:p><w:r><w:object><v:shape id="control_shape_1" o:allowincell="t" style="width:11.05pt;height:7.3pt" {shape_attrs}></v:shape><w:control r:id="rId3" w:name="CheckBox1" w:shapeid="control_shape_1"/></w:object></w:r></w:p>"##
+    );
     let ax = r#"<ax:ocx xmlns:ax="http://schemas.microsoft.com/office/2006/activeX" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" ax:classid="{8BD21D40-EC42-11CE-9E0D-00AA006002F3}" ax:persistence="persistStorage" r:id="rId1"/>"#;
     let ax_rels = r#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.microsoft.com/office/2006/relationships/activeXControlBinary" Target="activeX1.bin"/></Relationships>"#;
     let types = r#"<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="bin" ContentType="application/vnd.ms-office.activeX"/><Override PartName="/word/activeX/activeX1.xml" ContentType="application/vnd.ms-office.activeX+xml"/></Types>"#;
     let bytes = docx(
-        body,
+        &body,
         &[("rId3", "control", "activeX/activeX1.xml")],
         &[
             ("[Content_Types].xml", types),

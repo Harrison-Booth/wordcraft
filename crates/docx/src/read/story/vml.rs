@@ -337,6 +337,14 @@ impl Reader<'_> {
                 None => return self.read_control(sc, obj, rels),
             },
         };
+        // A control with no picture can come back as a plain VML shape (a recognised preset): keep
+        // the control, not that shape, so saving writes its markup and parts back.
+        if obj.child("w:control").is_some()
+            && !matches!(o, InlineObject::Image { .. })
+            && let Some(c) = self.read_control(sc, obj, rels)
+        {
+            return Some(c);
+        }
         if let InlineObject::Image { ole, .. } = &mut o {
             *ole = self.keep_embedded(obj, rels, &[]);
         }
