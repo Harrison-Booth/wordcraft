@@ -191,11 +191,11 @@ struct XCell {
 pub(super) fn xlsx_rows(pkg: &mut Package<'_>, path: &str) -> Result<Vec<Vec<String>>, String> {
     let wb = workbook(pkg)?;
     let shared = match wb.shared.as_deref().or(pkg.has("xl/sharedStrings.xml").then_some("xl/sharedStrings.xml")).map(str::to_string) {
-        Some(p) => shared_strings(&pkg.read(&p)?)?,
+        Some(p) => shared_strings(&pkg.read(&p)?).map_err(|e| format!("{p}: {e}"))?,
         None => Vec::new(),
     };
     let formats = match wb.styles.as_deref().or(pkg.has("xl/styles.xml").then_some("xl/styles.xml")).map(str::to_string) {
-        Some(p) => cell_formats(&pkg.read(&p)?)?,
+        Some(p) => cell_formats(&pkg.read(&p)?).map_err(|e| format!("{p}: {e}"))?,
         None => Vec::new(),
     };
     let xml = pkg.read(path)?;

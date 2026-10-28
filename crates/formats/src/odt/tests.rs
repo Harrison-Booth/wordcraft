@@ -183,6 +183,23 @@ fn object_without_mathml_falls_back_to_its_replacement_image() {
     assert!(imgs[0].data.as_slice() == png.as_slice());
 }
 
+#[test]
+fn a_malformed_tail_after_embedded_mathml_keeps_the_captured_equation() {
+    let math = b"<math><mi>x</mi></math><broken";
+    let frame = r#"<draw:frame svg:width="1in" svg:height="1in"><draw:object xlink:href="./Object 1"/></draw:frame>"#;
+    let content = format!(
+        r#"<office:document-content {NS_T}><office:body><office:text><text:p>{frame}</text:p></office:text></office:body></office:document-content>"#
+    );
+    let pkg = zip_of(&[("content.xml", content.as_bytes()), ("Object 1/content.xml", math)]);
+    let flow = parse(&pkg).unwrap();
+    let eqs: Vec<String> = paras(&flow)
+        .into_iter()
+        .flat_map(|p| &p.inlines)
+        .filter_map(|i| if let Inline::Equation { linear, .. } = i { Some(linear.clone()) } else { None })
+        .collect();
+    assert_eq!(eqs, vec!["x".to_string()]);
+}
+
 const NS_T: &str = r#"xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0" xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0" xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0""#;
 
 /// A package with `content.xml` and, when given, `styles.xml`.
