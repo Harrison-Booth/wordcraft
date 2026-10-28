@@ -17,7 +17,7 @@ crate name links to its source tree.
 
 | Layer | Crate | Lines | Job |
 |---|---|---|---|
-| L0 | [`control-key`](../crates/control-key/src) | 87 | Per-window control-port key files shared by the app and MCP bridge |
+| L0 standalone | [`control-key`](../crates/control-key/src) | 87 | Per-window control-port key files shared by the app and MCP bridge |
 | L0 | [`geom`](../crates/geom/src) | 1,271 | Units (points, twips, EMU, inches, cm), rectangles and measurement parsing |
 | L1 | [`doc`](../crates/doc/src) | 23,719 | Document model: stories, paragraphs, runs, tables, sections, styles, numbering, fields, notes, comments, revisions and equations; edit primitives and bidi |
 | L1 | [`fonts`](../crates/fonts/src) | 7,088 | Font database, metrics, outlines, HarfRust shaping, Word font substitution and OpenType MATH |
