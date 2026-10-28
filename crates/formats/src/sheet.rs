@@ -263,7 +263,7 @@ impl<'a> Package<'a> {
 /// [`MAX_XML_DEPTH`] (and their text) are skipped.
 enum Ev<'e> {
     Start(&'e BytesStart<'e>),
-    End(Vec<u8>),
+    End(String),
     Text(String),
 }
 
@@ -287,24 +287,24 @@ fn walk(xml: &[u8], mut f: impl FnMut(Ev<'_>)) {
             Ok(Event::Empty(e)) => {
                 if depth < MAX_XML_DEPTH {
                     f(Ev::Start(&e));
-                    f(Ev::End(e.local_name().as_ref().to_vec()));
+                    f(Ev::End(e.local_name().as_ref().to_owned()));
                 }
             }
             Ok(Event::End(e)) => {
                 if depth <= MAX_XML_DEPTH {
-                    f(Ev::End(e.local_name().as_ref().to_vec()));
+                    f(Ev::End(e.local_name().as_ref().to_owned()));
                 }
                 depth = depth.saturating_sub(1);
             }
-            Ok(Event::Text(t)) if depth <= MAX_XML_DEPTH => f(Ev::Text(t.decode().map(|c| c.into_owned()).unwrap_or_default())),
-            Ok(Event::CData(t)) if depth <= MAX_XML_DEPTH => f(Ev::Text(String::from_utf8_lossy(&t).into_owned())),
+            Ok(Event::Text(t)) if depth <= MAX_XML_DEPTH => f(Ev::Text((*t).to_owned())),
+            Ok(Event::CData(t)) if depth <= MAX_XML_DEPTH => f(Ev::Text((*t).to_owned())),
             Ok(Event::GeneralRef(g)) if depth <= MAX_XML_DEPTH => {
-                let s = match &g[..] {
-                    b"amp" => "&".to_string(),
-                    b"lt" => "<".to_string(),
-                    b"gt" => ">".to_string(),
-                    b"quot" => "\"".to_string(),
-                    b"apos" => "'".to_string(),
+                let s = match &*g {
+                    "amp" => "&".to_string(),
+                    "lt" => "<".to_string(),
+                    "gt" => ">".to_string(),
+                    "quot" => "\"".to_string(),
+                    "apos" => "'".to_string(),
                     _ => g.resolve_char_ref().ok().flatten().map(|c| c.to_string()).unwrap_or_default(),
                 };
                 f(Ev::Text(s));
@@ -316,10 +316,13 @@ fn walk(xml: &[u8], mut f: impl FnMut(Ev<'_>)) {
 }
 
 /// An attribute's value by local name.
-fn attr(e: &BytesStart<'_>, name: &[u8]) -> Option<String> {
-    e.attributes().with_checks(false).flatten().take(64).find(|a| a.key.local_name().as_ref() == name).map(|a| {
-        a.normalized_value(XmlVersion::Explicit1_0).map(|c| c.into_owned()).unwrap_or_else(|_| String::from_utf8_lossy(&a.value).into_owned())
-    })
+fn attr(e: &BytesStart<'_>, name: &str) -> Option<String> {
+    e.attributes()
+        .with_checks(false)
+        .flatten()
+        .take(64)
+        .find(|a| a.key.local_name().as_ref() == name)
+        .map(|a| a.normalized_value(XmlVersion::Explicit1_0).map(|c| c.into_owned()).unwrap_or_else(|_| a.value.to_string()))
 }
 
 /// `s` + `t`, keeping `s` at most [`MAX_CELL_CHARS`] characters.

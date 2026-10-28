@@ -26,9 +26,8 @@ pub(super) type Attrs = Vec<(String, String)>;
 fn attrs_of(e: &BytesStart<'_>) -> Attrs {
     let mut v = Vec::new();
     for a in e.attributes().with_checks(false).flatten().take(128) {
-        let k = String::from_utf8_lossy(a.key.as_ref()).into_owned();
-        let val =
-            a.normalized_value(XmlVersion::Explicit1_0).map(|c| c.into_owned()).unwrap_or_else(|_| String::from_utf8_lossy(&a.value).into_owned());
+        let k = a.key.as_ref().to_owned();
+        let val = a.normalized_value(XmlVersion::Explicit1_0).map(|c| c.into_owned()).unwrap_or_else(|_| a.value.to_string());
         v.push((k, val));
     }
     v
@@ -59,17 +58,17 @@ pub(super) fn events(xml: &[u8], mut f: impl FnMut(Ev)) {
     loop {
         buf.clear();
         match r.read_event_into(&mut buf) {
-            Ok(Event::Start(e)) => f(Ev::Start(String::from_utf8_lossy(e.name().as_ref()).into_owned(), attrs_of(&e))),
+            Ok(Event::Start(e)) => f(Ev::Start(e.name().as_ref().to_owned(), attrs_of(&e))),
             Ok(Event::Empty(e)) => {
-                let n = String::from_utf8_lossy(e.name().as_ref()).into_owned();
+                let n = e.name().as_ref().to_owned();
                 f(Ev::Start(n.clone(), attrs_of(&e)));
                 f(Ev::End(n));
             }
-            Ok(Event::End(e)) => f(Ev::End(String::from_utf8_lossy(e.name().as_ref()).into_owned())),
-            Ok(Event::Text(t)) => f(Ev::Text(t.decode().map(|c| c.into_owned()).unwrap_or_default())),
-            Ok(Event::CData(t)) => f(Ev::Text(String::from_utf8_lossy(&t).into_owned())),
+            Ok(Event::End(e)) => f(Ev::End(e.name().as_ref().to_owned())),
+            Ok(Event::Text(t)) => f(Ev::Text((*t).to_owned())),
+            Ok(Event::CData(t)) => f(Ev::Text((*t).to_owned())),
             Ok(Event::GeneralRef(r)) => {
-                let name = String::from_utf8_lossy(&r).into_owned();
+                let name = (*r).to_owned();
                 let s = match name.as_str() {
                     "amp" => "&".to_string(),
                     "lt" => "<".to_string(),

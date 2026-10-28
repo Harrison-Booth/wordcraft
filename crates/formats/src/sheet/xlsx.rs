@@ -15,14 +15,14 @@ pub(super) fn relationships(xml: &[u8], dir: &str) -> Vec<Rel> {
     let mut v = Vec::new();
     walk(xml, |ev| {
         if let Ev::Start(e) = ev
-            && e.local_name().as_ref() == b"Relationship"
+            && e.local_name().as_ref() == "Relationship"
             && v.len() < MAX_SHEETS * 2
         {
-            if attr(e, b"TargetMode").is_some_and(|m| m.eq_ignore_ascii_case("External")) {
+            if attr(e, "TargetMode").is_some_and(|m| m.eq_ignore_ascii_case("External")) {
                 return;
             }
-            let target = attr(e, b"Target").unwrap_or_default();
-            v.push(Rel { id: attr(e, b"Id").unwrap_or_default(), kind: attr(e, b"Type").unwrap_or_default(), target: join(dir, &target) });
+            let target = attr(e, "Target").unwrap_or_default();
+            v.push(Rel { id: attr(e, "Id").unwrap_or_default(), kind: attr(e, "Type").unwrap_or_default(), target: join(dir, &target) });
         }
     });
     v
@@ -75,8 +75,8 @@ fn workbook(pkg: &mut Package<'_>) -> Result<Workbook, String> {
     walk(&xml, |ev| {
         if let Ev::Start(e) = ev {
             match e.local_name().as_ref() {
-                b"sheet" if listed.len() < MAX_SHEETS => listed.push((attr(e, b"name").unwrap_or_default(), attr(e, b"id").unwrap_or_default())),
-                b"workbookPr" => date1904 = attr(e, b"date1904").is_some_and(|v| v == "1" || v.eq_ignore_ascii_case("true")),
+                "sheet" if listed.len() < MAX_SHEETS => listed.push((attr(e, "name").unwrap_or_default(), attr(e, "id").unwrap_or_default())),
+                "workbookPr" => date1904 = attr(e, "date1904").is_some_and(|v| v == "1" || v.eq_ignore_ascii_case("true")),
                 _ => {}
             }
         }
@@ -105,21 +105,21 @@ fn shared_strings(xml: &[u8]) -> Vec<String> {
     let (mut in_t, mut phonetic) = (false, 0usize);
     walk(xml, |ev| match ev {
         Ev::Start(e) => match e.local_name().as_ref() {
-            b"si" => cur = Some(String::new()),
-            b"t" => in_t = true,
-            b"rPh" => phonetic += 1,
+            "si" => cur = Some(String::new()),
+            "t" => in_t = true,
+            "rPh" => phonetic += 1,
             _ => {}
         },
-        Ev::End(n) => match n.as_slice() {
-            b"si" => {
+        Ev::End(n) => match n.as_str() {
+            "si" => {
                 if let Some(s) = cur.take()
                     && out.len() < MAX_SHARED
                 {
                     out.push(s);
                 }
             }
-            b"t" => in_t = false,
-            b"rPh" => phonetic = phonetic.saturating_sub(1),
+            "t" => in_t = false,
+            "rPh" => phonetic = phonetic.saturating_sub(1),
             _ => {}
         },
         Ev::Text(t) => {
@@ -141,16 +141,16 @@ fn cell_formats(xml: &[u8]) -> Vec<Option<DateKind>> {
     let mut in_xfs = false;
     walk(xml, |ev| match ev {
         Ev::Start(e) => match e.local_name().as_ref() {
-            b"numFmt" if custom.len() < MAX_XFS => {
-                if let Some(id) = attr(e, b"numFmtId").and_then(|v| v.trim().parse().ok()) {
-                    custom.insert(id, custom_date(&attr(e, b"formatCode").unwrap_or_default()));
+            "numFmt" if custom.len() < MAX_XFS => {
+                if let Some(id) = attr(e, "numFmtId").and_then(|v| v.trim().parse().ok()) {
+                    custom.insert(id, custom_date(&attr(e, "formatCode").unwrap_or_default()));
                 }
             }
-            b"cellXfs" => in_xfs = true,
-            b"xf" if in_xfs && xfs.len() < MAX_XFS => xfs.push(attr(e, b"numFmtId").and_then(|v| v.trim().parse().ok()).unwrap_or(0)),
+            "cellXfs" => in_xfs = true,
+            "xf" if in_xfs && xfs.len() < MAX_XFS => xfs.push(attr(e, "numFmtId").and_then(|v| v.trim().parse().ok()).unwrap_or(0)),
             _ => {}
         },
-        Ev::End(n) if n.as_slice() == b"cellXfs" => in_xfs = false,
+        Ev::End(n) if n.as_str() == "cellXfs" => in_xfs = false,
         _ => {}
     });
     xfs.into_iter().map(|id| custom.get(&id).copied().unwrap_or_else(|| builtin_date(id))).collect()
@@ -203,24 +203,24 @@ pub(super) fn xlsx_rows(pkg: &mut Package<'_>, path: &str) -> Result<Vec<Vec<Str
     let (mut in_v, mut in_is_t, mut phonetic) = (false, false, 0usize);
     walk(&xml, |ev| match ev {
         Ev::Start(e) => match e.local_name().as_ref() {
-            b"sheetData" => in_data = true,
-            b"row" if in_data => {
-                row_no = attr(e, b"r").and_then(|v| v.trim().parse().ok()).unwrap_or(row_no.saturating_add(1));
+            "sheetData" => in_data = true,
+            "row" if in_data => {
+                row_no = attr(e, "r").and_then(|v| v.trim().parse().ok()).unwrap_or(row_no.saturating_add(1));
                 next_col = 0;
             }
-            b"c" if in_data => {
+            "c" if in_data => {
                 // A reference that isn't one (or is past the last column) drops the cell.
-                let col = match attr(e, b"r") {
+                let col = match attr(e, "r") {
                     Some(r) => ref_col(r.trim()).unwrap_or(usize::MAX),
                     None => next_col,
                 };
                 next_col = col.saturating_add(1);
-                let style = attr(e, b"s").and_then(|v| v.trim().parse().ok()).unwrap_or(0);
-                cell = Some(XCell { col, kind: attr(e, b"t").unwrap_or_default(), style, ..Default::default() });
+                let style = attr(e, "s").and_then(|v| v.trim().parse().ok()).unwrap_or(0);
+                cell = Some(XCell { col, kind: attr(e, "t").unwrap_or_default(), style, ..Default::default() });
             }
-            b"v" => in_v = cell.is_some(),
-            b"t" => in_is_t = cell.is_some(),
-            b"rPh" => phonetic += 1,
+            "v" => in_v = cell.is_some(),
+            "t" => in_is_t = cell.is_some(),
+            "rPh" => phonetic += 1,
             _ => {}
         },
         Ev::Text(t) => {
@@ -232,12 +232,12 @@ pub(super) fn xlsx_rows(pkg: &mut Package<'_>, path: &str) -> Result<Vec<Vec<Str
                 }
             }
         }
-        Ev::End(n) => match n.as_slice() {
-            b"sheetData" => in_data = false,
-            b"v" => in_v = false,
-            b"t" => in_is_t = false,
-            b"rPh" => phonetic = phonetic.saturating_sub(1),
-            b"c" => {
+        Ev::End(n) => match n.as_str() {
+            "sheetData" => in_data = false,
+            "v" => in_v = false,
+            "t" => in_is_t = false,
+            "rPh" => phonetic = phonetic.saturating_sub(1),
+            "c" => {
                 let Some(c) = cell.take() else { return };
                 let text = xlsx_value(&c, &shared, &formats, wb.date1904);
                 if text.is_empty() || c.col >= MAX_COLS {
