@@ -670,3 +670,49 @@ fn drag_preview_scale_stays_within_the_gpu_texture_limit() {
         assert!((100.0f32 * preview_scale(bad, 100.0, 100.0, 0)).ceil() <= 2.0);
     }
 }
+
+#[test]
+fn dragging_a_large_picture_renders_a_preview_within_the_gpu_texture_limit() {
+    use crate::table_resize::tests::{H, button, steps};
+    use egui::Event;
+    let image = image::RgbaImage::from_pixel(16, 16, image::Rgba([30, 120, 210, 255]));
+    let mut bytes = Vec::new();
+    image.write_to(&mut std::io::Cursor::new(&mut bytes), image::ImageFormat::Png).unwrap();
+    let picture = InlineObject::Image {
+        media: "large-preview-test".into(),
+        w: 14_400.0,
+        h: 200.0,
+        alt: String::new(),
+        float: wordcraft_doc::para::Float { wrap: Wrap::InFrontOfText, x: 100.0, y: 100.0, ..Default::default() },
+        crop: [0.0; 4],
+        ole: None,
+    };
+    let (mut app, _) = app_with(picture);
+    app.session.doc.media.insert("large-preview-test".into(), Arc::new(bytes));
+    app.session.touch();
+    app.run("view.commentsPane", json!({"value": false})).unwrap();
+    app.run("select.range", json!({"anchor": Pos::body(0, 0), "focus": Pos::body(0, OBJ.len_utf8())})).unwrap();
+    let mut h: H = egui_kittest::Harness::builder().with_size(egui::vec2(1440.0, 900.0)).with_step_dt(0.25).build_ui_state(
+        |ui, app: &mut WordApp| {
+            let ctx = ui.ctx().clone();
+            app.logic(&ctx);
+            app.ui(ui);
+        },
+        app,
+    );
+    steps(&mut h, 6);
+    let hit = h.state_mut().session.layout().object(&Pos::body(0, 0), 0).expect("laid out");
+    let max_side = h.ctx.input(|i| i.max_texture_side);
+    assert!(hit.bounds().w * h.ctx.pixels_per_point() > max_side as f32, "unclamped picture exceeds the texture limit");
+    let at = crate::canvas::page_to_screen(h.state_mut(), hit.page, hit.rect.x + 10.0, hit.rect.y + 10.0).expect("the picture center is visible");
+    h.event(Event::PointerMoved(at));
+    button(&h, at, true);
+    h.step();
+    let moved = at + egui::vec2(24.0, 0.0);
+    h.event(Event::PointerMoved(moved));
+    steps(&mut h, 2);
+    let drag = h.state().canvas.obj_drag.as_ref().expect("picture drag started");
+    let preview = drag.preview.as_ref().expect("large picture preview is generated");
+    let [width, height] = preview.size();
+    assert!(width <= max_side && height <= max_side, "preview is {width}×{height}, texture limit is {max_side}");
+}
