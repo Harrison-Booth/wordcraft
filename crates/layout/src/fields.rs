@@ -304,7 +304,8 @@ fn value_text(fmt: NumFormat, value: f64) -> Option<String> {
     }
     // Word rounds half away from zero, except that a fraction between a half and one is an error.
     let size = value.abs();
-    if !size.is_finite() || size > 1e15 || (0.5..1.0).contains(&size) {
+    let bounded_format = !matches!(fmt, NumFormat::Decimal | NumFormat::NumberInDash | NumFormat::Ordinal);
+    if !size.is_finite() || (bounded_format && size > 1e15) || (0.5..1.0).contains(&size) {
         return None;
     }
     let n = value.round() as i64;
@@ -317,8 +318,15 @@ fn value_text(fmt: NumFormat, value: f64) -> Option<String> {
         NumFormat::Decimal => Some(n.to_string()),
         NumFormat::NumberInDash => Some(format!("- {n} -")),
         NumFormat::Ordinal => {
-            let abs = u32::try_from(n.unsigned_abs()).ok()?;
-            Some(format!("{}{}", if n < 0 { "-" } else { "" }, fmt.format(abs)))
+            let abs = n.unsigned_abs();
+            let suffix = match (abs % 100, abs % 10) {
+                (11..=13, _) => "th",
+                (_, 1) => "st",
+                (_, 2) => "nd",
+                (_, 3) => "rd",
+                _ => "th",
+            };
+            Some(format!("{}{}{}", if n < 0 { "-" } else { "" }, abs, suffix))
         }
         _ => in_range(u32::MAX).map(|n| fmt.format(n)),
     }
@@ -741,6 +749,11 @@ mod tests {
         assert_eq!(shown("", NumFormat::Ordinal, 2.5), "3rd");
         assert_eq!(shown("", NumFormat::Ordinal, -1.0), "-1st");
         assert_eq!(shown("", NumFormat::Ordinal, 1_000_000.0), "1000000th");
+        for (fmt, expected) in
+            [(NumFormat::Decimal, "1000000000000001"), (NumFormat::NumberInDash, "- 1000000000000001 -"), (NumFormat::Ordinal, "1000000000000001st")]
+        {
+            assert_eq!(shown("", fmt, 1_000_000_000_000_001.0), expected);
+        }
         // Page-number fields use the same rules.
         assert_eq!(field_number(r"SEQ x \* Upper", NumFormat::CardinalText, 1_000_140), error.to_uppercase());
         assert_eq!(field_number("SEQ x", NumFormat::CardinalText, 999_999), "nine hundred ninety-nine thousand nine hundred ninety-nine");
