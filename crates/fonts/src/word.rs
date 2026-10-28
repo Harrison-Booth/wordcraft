@@ -371,21 +371,20 @@ const METRIC_TWINS: &[(&str, &[&str])] = &[
     ("Cambria", &["Caladea"]),
 ];
 
-/// Is Word's core family `word` drawn with itself or a metric twin? Judged by the substitute that
-/// resolution picks, not by what is installed: a twin that comes after another font in the
-/// substitute list is not the one drawn.
-fn has_metric_match(db: &FontDb, word: &str, twins: &[&str]) -> bool {
-    db.has_family(word) || substitute(db, word).is_some_and(|s| twins.contains(&s))
-}
-
-/// The Word core families drawn with neither the font nor a metric-compatible twin, each with
-/// the family drawn in its place: lines and pages measured with those won't match Word's.
-pub fn missing_metric_fonts() -> Vec<(&'static str, &'static str)> {
+/// Word's core families not drawn with themselves or a metric twin, paired with the primary
+/// resolved family. Glyphs the primary family cannot draw may still use glyph fallback.
+pub fn missing_metric_fonts() -> Vec<(&'static str, String)> {
     let db = FontDb::global();
     METRIC_TWINS
         .iter()
-        .filter(|(word, twins)| !has_metric_match(db, word, twins))
-        .map(|(word, _)| (*word, substitute(db, word).unwrap_or(crate::FALLBACK_FAMILY)))
+        .filter_map(|(word, twins)| {
+            let resolved = resolve(word, false, false);
+            if db.has_family(word) || twins.iter().any(|twin| resolved.face.family.eq_ignore_ascii_case(twin)) {
+                None
+            } else {
+                Some((*word, resolved.face.family.clone()))
+            }
+        })
         .collect()
 }
 
@@ -730,8 +729,12 @@ mod tests {
         let missing = missing_metric_fonts();
         for (word, twins) in METRIC_TWINS {
             let reported = missing.iter().any(|(w, _)| w == word);
-            let drawn = if db.has_family(word) { Some(*word) } else { substitute(db, word) };
-            assert_eq!(reported, !drawn.is_some_and(|d| d == *word || twins.contains(&d)), "{word}");
+            let drawn = resolve(word, false, false).face.family.clone();
+            let has_metric_match = db.has_family(word) || twins.iter().any(|twin| drawn.eq_ignore_ascii_case(twin));
+            assert_eq!(reported, !has_metric_match, "{word}: {drawn}");
+            if reported {
+                assert_eq!(missing.iter().find(|(name, _)| name == word).map(|(_, used)| used), Some(&drawn));
+            }
         }
         assert!(missing.iter().all(|(_, used)| db.has_family(used)));
     }

@@ -417,7 +417,7 @@ fn run<S: AsRef<OsStr>>(args: &[S]) -> Result<(), Failure> {
             let mut s = open(&i, password.as_deref())?;
             for (word, used) in wordcraft_fonts::word::missing_metric_fonts() {
                 eprintln!(
-                    "note: {word} and its metric-compatible twins aren't installed; drawing it in {used}, so lines and pages may not match Word's"
+                    "note: {word} and its metric-compatible twins aren't installed; the primary family is {used}, so lines and pages may not match Word's; uncovered characters may use glyph fallback"
                 );
             }
             if rest.iter().any(|a| a == "--update-fields") {
