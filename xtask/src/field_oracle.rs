@@ -35,14 +35,22 @@ fn from_hex(h: &str) -> Option<String> {
     String::from_utf8(bytes?).ok()
 }
 
-/// Word's results by code index, from the script's `index<TAB>hex` lines.
-pub fn parse_word_output(out: &str, n: usize) -> Result<Vec<String>, String> {
+/// Word's per-code results by index, from `S|E<TAB>index<TAB>hex` records.
+pub fn parse_word_output(out: &str, n: usize) -> Result<Vec<Result<String, String>>, String> {
     let mut res = vec![None; n];
-    for line in out.lines().map(str::trim).filter(|l| !l.is_empty()) {
-        let (i, hex) = line.split_once('\t').unwrap_or((line, ""));
+    for line in out.lines().filter(|l| !l.trim().is_empty()) {
+        let mut parts = line.splitn(3, '\t');
+        let kind = parts.next().unwrap_or("");
+        let i = parts.next().ok_or_else(|| format!("unexpected output from Word: {line}"))?;
+        let hex = parts.next().ok_or_else(|| format!("unexpected output from Word: {line}"))?;
         let i: usize = i.parse().map_err(|_| format!("unexpected output from Word: {line}"))?;
         let text = from_hex(hex).ok_or_else(|| format!("bad result from Word: {line}"))?;
-        *res.get_mut(i).ok_or_else(|| format!("Word returned index {i} for {n} codes"))? = Some(text);
+        let result = match kind {
+            "S" => Ok(text),
+            "E" => Err(text),
+            _ => return Err(format!("unexpected output from Word: {line}")),
+        };
+        *res.get_mut(i).ok_or_else(|| format!("Word returned index {i} for {n} codes"))? = Some(result);
     }
     res.into_iter().enumerate().map(|(i, r)| r.ok_or_else(|| format!("Word returned no result for code {i}"))).collect()
 }
@@ -74,7 +82,7 @@ fn windows_path(p: &Path) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&o.stdout).trim().to_string())
 }
 
-fn word_results(codes: &[String]) -> Result<Vec<String>, String> {
+fn word_results(codes: &[String]) -> Result<Vec<Result<String, String>>, String> {
     // A script file, not `-Command -`: PowerShell reads a piped multi-line script line by line and runs nothing.
     let dir = std::env::temp_dir().join(format!("field-oracle-word-{}", std::process::id()));
     std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
@@ -86,7 +94,7 @@ fn word_results(codes: &[String]) -> Result<Vec<String>, String> {
     run
 }
 
-fn run_script(ps1: &Path, n: usize) -> Result<Vec<String>, String> {
+fn run_script(ps1: &Path, n: usize) -> Result<Vec<Result<String, String>>, String> {
     let mut child = powershell()
         .arg(windows_path(ps1)?)
         .stdin(Stdio::null())
@@ -189,27 +197,39 @@ fn is_layout_field(code: &str) -> bool {
 }
 
 /// The comparison table. `word` is `None` when Word was skipped.
-pub fn table(codes: &[String], word: Option<&[String]>, wc: &[String]) -> String {
+pub fn table(codes: &[String], word: Option<&[Result<String, String>]>, wc: &[String]) -> String {
     let mut s = String::from("| Code | Word | WordCraft | |\n|---|---|---|---|\n");
-    let (mut same, mut diff) = (0, 0);
+    let (mut same, mut diff, mut errors) = (0, 0, 0);
     for (i, code) in codes.iter().enumerate() {
         let w = word.and_then(|w| w.get(i));
         let verdict = match w {
             None => "",
-            Some(_) if is_layout_field(code) && wc.get(i).is_none_or(String::is_empty) => "n/a (layout field)",
-            Some(w) if Some(w) == wc.get(i) => {
+            Some(Err(_)) => {
+                errors += 1;
+                "n/a (Word error)"
+            }
+            Some(Ok(_)) if is_layout_field(code) && wc.get(i).is_none_or(String::is_empty) => "n/a (layout field)",
+            Some(Ok(w)) if Some(w) == wc.get(i) => {
                 same += 1;
                 "match"
             }
-            Some(_) => {
+            Some(Ok(_)) => {
                 diff += 1;
                 "**DIFF**"
             }
         };
-        s += &format!("| {} | {} | {} | {verdict} |\n", cell(code), w.map_or(String::new(), |w| cell(w)), cell(wc.get(i).map_or("", String::as_str)));
+        let word_cell = w.map_or(String::new(), |result| match result {
+            Ok(value) => cell(value),
+            Err(error) => format!("Word error: {}", cell(error)),
+        });
+        s += &format!("| {} | {} | {} | {verdict} |\n", cell(code), word_cell, cell(wc.get(i).map_or("", String::as_str)));
     }
     if word.is_some() {
-        s += &format!("\n{} codes: {same} match, {diff} differ.\n", codes.len());
+        if errors == 0 {
+            s += &format!("\n{} codes: {same} match, {diff} differ.\n", codes.len());
+        } else {
+            s += &format!("\n{} codes: {same} match, {diff} differ, {errors} Word errors.\n", codes.len());
+        }
     }
     s
 }
@@ -265,17 +285,27 @@ mod tests {
 
     #[test]
     fn word_output_maps_by_index_and_rejects_gaps() {
-        let out = format!("1\t{}\n0\t\n", to_hex("six"));
-        assert_eq!(parse_word_output(&out, 2).unwrap(), ["", "six"]);
-        assert!(parse_word_output("0\t\n", 2).is_err());
-        assert!(parse_word_output("5\t\n", 2).is_err());
+        let out = format!("S\t1\t{}\nS\t0\t\n", to_hex("six"));
+        assert_eq!(parse_word_output(&out, 2).unwrap(), [Ok(String::new()), Ok("six".into())]);
+        assert!(parse_word_output("S\t0\t\n", 2).is_err());
+        assert!(parse_word_output("S\t5\t\n", 2).is_err());
+    }
+
+    #[test]
+    fn word_output_keeps_com_errors_separate_from_values() {
+        let out = format!("E\t0\t{}\nS\t1\t{}\n", to_hex("field failed"), to_hex("six"));
+        assert_eq!(parse_word_output(&out, 2).unwrap(), [Err("field failed".into()), Ok("six".into())]);
+        let codes = vec!["bad field".into(), "NUMWORDS".into()];
+        let table = table(&codes, Some(&[Err("field failed".into()), Ok("6".into())]), &["".into(), "6".into()]);
+        assert!(table.contains("| `bad field` | Word error: `field failed` | `` | n/a (Word error) |"));
+        assert!(table.contains("2 codes: 1 match, 0 differ, 1 Word errors."), "{table}");
     }
 
     #[test]
     fn table_marks_differences_and_escapes_pipes() {
         let codes = vec!["a".to_string(), "b|c".to_string()];
-        let t = table(&codes, Some(&["1".into(), "2".into()]), &["1".into(), "3".into()]);
-        let layout = table(&["PAGE \\* roman".to_string()], Some(&["i".into()]), &["".into()]);
+        let t = table(&codes, Some(&[Ok("1".into()), Ok("2".into())]), &["1".into(), "3".into()]);
+        let layout = table(&["PAGE \\* roman".to_string()], Some(&[Ok("i".into())]), &["".into()]);
         assert!(layout.contains("n/a (layout field)") && layout.contains("0 match, 0 differ"));
         assert!(t.contains("| `a` | `1` | `1` | match |"));
         assert!(t.contains("| `b\\|c` | `2` | `3` | **DIFF** |"));

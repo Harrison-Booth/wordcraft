@@ -18,15 +18,30 @@ try {
     $word.DisplayAlerts = 0
     $doc = $word.Documents.Add()
     $codes = (FromHex $codeHex) -split "`n"
+    $fields = @()
+    $results = @{}
+    $errors = @{}
     for ($i = 0; $i -lt $codes.Count; $i++) {
         try {
             $end = $doc.Content.End - 1
             $f = $doc.Fields.Add($doc.Range($end, $end), -1, $codes[$i], $false)
-            [void]$f.Update()
-            $res = $f.Result.Text
-        } catch { $res = 'COM error: ' + $_.Exception.Message }
-        $doc.Content.InsertParagraphAfter()
-        '{0}{1}{2}' -f $i, "`t", (ToHex (($res -replace "[\r\n\a]+", ' ').TrimEnd()))
+            $fields += [pscustomobject]@{ Index = $i; Field = $f }
+        } catch { $errors[$i] = $_.Exception.Message }
+        [void]$doc.Content.InsertParagraphAfter()
+    }
+    foreach ($entry in $fields) {
+        try {
+            [void]$entry.Field.Update()
+            $results[$entry.Index] = $entry.Field.Result.Text
+        } catch { $errors[$entry.Index] = $_.Exception.Message }
+    }
+    for ($i = 0; $i -lt $codes.Count; $i++) {
+        if ($errors.ContainsKey($i)) {
+            '{0}{1}{2}{1}{3}' -f 'E', "`t", $i, (ToHex ([string]$errors[$i]))
+        } else {
+            $res = ([string]$results[$i] -replace "[\r\n\a]+", ' ').TrimEnd()
+            '{0}{1}{2}{1}{3}' -f 'S', "`t", $i, (ToHex $res)
+        }
     }
     $doc.Close(0)
 } finally {
