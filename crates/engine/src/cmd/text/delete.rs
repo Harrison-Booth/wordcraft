@@ -50,7 +50,7 @@ fn backspace_inner(s: &mut Session, _: &Value) -> CmdResult {
     let before = para.text.get(..f.off).unwrap_or_default();
     if !before.is_empty()
         && before.chars().all(|c| c == OBJ)
-        && para.objects_with_offsets().take_while(|(o, _)| *o < f.off).all(|(_, o)| o.is_floating())
+        && para.objects_with_offsets().take_while(|(o, _)| *o < f.off).all(|(_, o)| o.is_marker() || o.is_floating())
     {
         f.off = 0;
     }
@@ -107,6 +107,12 @@ fn backspace_inner(s: &mut Session, _: &Value) -> CmdResult {
                 delete_selection(s)?;
                 return sel_result(s);
             }
+            // Joining moves a content control whose start is at the paragraph edge. Check its
+            // contents explicitly: the paragraph-mark range itself ends before those contents.
+            for control in s.doc.control_ranges(f.story).into_iter().filter(|r| r.start.path == f.path && r.start.off == f.off) {
+                crate::cmd::controls::check_edit(s, &control.content_start(), &control.end)?;
+            }
+            crate::cmd::controls::check_delete(s, &a, &f)?;
             let at = s.doc.delete_range(&a, &f)?;
             s.sel = Selection::caret(at);
         }
