@@ -290,6 +290,8 @@ pub(crate) fn layout_pass(
         while block <= last {
             let Some(b) = doc.body.get(block) else { break };
             let before = balance.then(|| (pb.pages.len(), Snap::take(&mut pb, &ctx)));
+            // A body table's cell paragraphs evaluate PAGE without the paragraph path's assignment.
+            ctx.fields.page_format = pb.sect.page_num_format;
             pb.mark_block();
             match (&**b, &outline) {
                 (Block::Para(p), Some(o)) => place_outline_para(&mut ctx, &mut pb, p, block, o),

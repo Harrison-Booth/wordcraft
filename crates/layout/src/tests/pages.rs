@@ -633,3 +633,27 @@ fn body_page_field_uses_the_section_number_format() {
         .collect();
     assert_eq!(shown, ["one", "ONE"], "{shown:?}");
 }
+
+/// A PAGE field in a table that opens the body uses the section's number format too: the table
+/// is placed without the paragraph path that sets it.
+#[test]
+fn table_cell_page_field_uses_the_section_number_format() {
+    use wordcraft_doc::Table;
+    let mut d = Document::from_text("after");
+    d.last_section.page_num_format = wordcraft_doc::section::NumFormat::CardinalText;
+    let mut t = Table::new(1, 1, 200.0);
+    let mut p = wordcraft_doc::Paragraph::with_text("", Default::default());
+    let field = InlineObject::Field { instr: "PAGE".into(), result: "1".into(), locked: false, dirty: false, code: false, form: String::new() };
+    p.insert_object(0, field, &Default::default()).unwrap();
+    if let Some(c) = t.rows.first_mut().and_then(|r| r.cells.first_mut()) {
+        c.blocks = vec![para_block(p)];
+    }
+    d.insert_block(StoryRef::Body, &Path::top(0), Block::Table(t)).unwrap();
+    let l = lay(&d);
+    let shown: String = l.pages[0]
+        .items
+        .iter()
+        .filter_map(|it| if let Placed::Lines { para, path, .. } = it { (path.0.len() > 1).then(|| para.shown.iter().map(|x| x.1.clone()).collect::<String>()) } else { None })
+        .collect();
+    assert_eq!(shown, "one");
+}
