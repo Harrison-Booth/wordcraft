@@ -709,12 +709,17 @@ fn scrub_private(bytes: &[u8], names: bool, dates: bool) -> Option<Vec<u8>> {
     const WML_STRICT: &str = "http://purl.oclc.org/ooxml/wordprocessingml/main";
     const W15: &str = "http://schemas.microsoft.com/office/word/2012/wordml";
     let transcoded = crate::xml::utf16_to_utf8(bytes);
-    let bytes = match transcoded.as_deref() {
+    let rewritten = match transcoded.as_deref() {
+        Some(text) => Some(utf8_declaration(text)?),
+        None => None,
+    };
+    let bytes = match rewritten.as_deref() {
         Some(text) => text.as_bytes(),
         None if bytes.contains(&0) => return None,
         None => bytes,
     };
-    let ns_is = |r: &ResolveResult, ns: &str| matches!(r, ResolveResult::Bound(n) if n.as_ref() == ns);
+    let ns_is =
+        |r: &ResolveResult, ns: &str| matches!(r, ResolveResult::Bound(n) if quick_xml::escape::unescape(n.as_ref()).is_ok_and(|value| value == ns));
     let wml = |r: &ResolveResult| ns_is(r, WML) || ns_is(r, WML_STRICT);
     let mut r = NsReader::from_reader(bytes);
     r.resolver_mut().set_max_namespace_bindings(256);
@@ -771,6 +776,32 @@ fn scrub_private(bytes: &[u8], names: bool, dates: bool) -> Option<Vec<u8>> {
         out.write_event(ev).ok()?;
     }
     Some(out.into_inner())
+}
+
+/// Rewrites an XML declaration's encoding after a UTF-16 part has been transcoded to UTF-8.
+/// XML declarations are optional; malformed ones fail closed with the enclosing privacy scrub.
+fn utf8_declaration(text: &str) -> Option<String> {
+    let Some(tail) = text.strip_prefix("<?xml") else { return Some(text.to_string()) };
+    if !tail.starts_with(char::is_whitespace) {
+        return Some(text.to_string());
+    }
+    let end = text.find("?>")?;
+    let declaration = &text[..end];
+    let Some(start) = declaration.find("encoding") else { return Some(text.to_string()) };
+    let after_name = &declaration[start + "encoding".len()..];
+    let after_space = after_name.trim_start();
+    let after_equals = after_space.strip_prefix('=')?.trim_start();
+    let quote = after_equals.chars().next()?;
+    if !matches!(quote, '\'' | '"') {
+        return None;
+    }
+    let value_start = declaration.len() - after_equals.len() + quote.len_utf8();
+    let value_end = declaration[value_start..].find(quote)? + value_start;
+    let mut rewritten = String::with_capacity(text.len());
+    rewritten.push_str(&text[..value_start]);
+    rewritten.push_str("UTF-8");
+    rewritten.push_str(&text[value_end..]);
+    Some(rewritten)
 }
 
 /// A VML `style` with the object's size, rotation and flips, and its offset when it floats
@@ -841,6 +872,17 @@ fn valid_part_name(name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn utf16_privacy_scrub_normalizes_namespaces_and_encoding() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-16"?><root xmlns:w15="http://schemas.microsoft.com/office/word/2012/wordm&#108;"><w15:presenceInfo w15:userId="private"/><keep>opaque</keep></root>"#;
+        let utf16: Vec<u8> = [0xFF, 0xFE].into_iter().chain(xml.encode_utf16().flat_map(u16::to_le_bytes)).collect();
+        let scrubbed = scrub_private(&utf16, true, false).expect("UTF-16 XML can be scrubbed");
+        let scrubbed = String::from_utf8(scrubbed).expect("rewritten output is UTF-8");
+        assert!(scrubbed.contains("encoding=\"UTF-8\""), "{scrubbed}");
+        assert!(!scrubbed.contains("presenceInfo") && !scrubbed.contains("private"), "{scrubbed}");
+        assert!(scrubbed.contains("opaque"), "{scrubbed}");
+    }
 
     #[test]
     fn charts_cut_to_the_limits_on_save_say_so_once() {
