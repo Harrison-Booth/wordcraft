@@ -11,7 +11,7 @@ pub(super) struct Rel {
 }
 
 /// The relationships of a part in `dir` (targets resolved to package paths).
-pub(super) fn relationships(xml: &[u8], dir: &str) -> Vec<Rel> {
+pub(super) fn relationships(xml: &[u8], dir: &str) -> Result<Vec<Rel>, String> {
     let mut v = Vec::new();
     walk(xml, |ev| {
         if let Ev::Start(e) = ev
@@ -24,8 +24,8 @@ pub(super) fn relationships(xml: &[u8], dir: &str) -> Vec<Rel> {
             let target = attr(e, "Target").unwrap_or_default();
             v.push(Rel { id: attr(e, "Id").unwrap_or_default(), kind: attr(e, "Type").unwrap_or_default(), target: join(dir, &target) });
         }
-    });
-    v
+    })?;
+    Ok(v)
 }
 
 /// A relative part name resolved against `dir` (`/` = package root).
@@ -67,9 +67,12 @@ struct Workbook {
 }
 
 fn workbook(pkg: &mut Package<'_>) -> Result<Workbook, String> {
-    let path = pkg.workbook_path().ok_or("the workbook part is missing")?;
+    let path = pkg.workbook_path()?.ok_or("the workbook part is missing")?;
     let xml = pkg.read(&path)?;
-    let rels = pkg.read(&rels_of(&path)).map(|r| relationships(&r, dir_of(&path))).unwrap_or_default();
+    let rels = match pkg.read(&rels_of(&path)) {
+        Ok(r) => relationships(&r, dir_of(&path))?,
+        Err(_) => Vec::new(),
+    };
     let mut listed: Vec<(String, String)> = Vec::new();
     let mut date1904 = false;
     walk(&xml, |ev| {
@@ -80,7 +83,7 @@ fn workbook(pkg: &mut Package<'_>) -> Result<Workbook, String> {
                 _ => {}
             }
         }
-    });
+    })?;
     let sheets = listed
         .into_iter()
         .filter_map(|(name, id)| {
@@ -99,7 +102,7 @@ pub(super) fn xlsx_sheets(pkg: &mut Package<'_>) -> Result<Vec<SheetRef>, String
 
 /// The shared string table (§18.4): each `si`'s text, rich-text runs joined, phonetic runs
 /// (`rPh`) left out.
-fn shared_strings(xml: &[u8]) -> Vec<String> {
+fn shared_strings(xml: &[u8]) -> Result<Vec<String>, String> {
     let mut out = Vec::new();
     let mut cur: Option<String> = None;
     let (mut in_t, mut phonetic) = (false, 0usize);
@@ -130,12 +133,12 @@ fn shared_strings(xml: &[u8]) -> Vec<String> {
                 push_capped(s, &t);
             }
         }
-    });
-    out
+    })?;
+    Ok(out)
 }
 
 /// Each cell format's (`cellXfs/xf`, by `s` index) date kind.
-fn cell_formats(xml: &[u8]) -> Vec<Option<DateKind>> {
+fn cell_formats(xml: &[u8]) -> Result<Vec<Option<DateKind>>, String> {
     let mut custom: HashMap<u32, Option<DateKind>> = HashMap::new();
     let mut xfs: Vec<u32> = Vec::new();
     let mut in_xfs = false;
@@ -152,8 +155,8 @@ fn cell_formats(xml: &[u8]) -> Vec<Option<DateKind>> {
         },
         Ev::End(n) if n.as_str() == "cellXfs" => in_xfs = false,
         _ => {}
-    });
-    xfs.into_iter().map(|id| custom.get(&id).copied().unwrap_or_else(|| builtin_date(id))).collect()
+    })?;
+    Ok(xfs.into_iter().map(|id| custom.get(&id).copied().unwrap_or_else(|| builtin_date(id))).collect())
 }
 
 /// A cell reference's 0-based column (`C5` → 2); `None` when it isn't one.
@@ -186,11 +189,11 @@ struct XCell {
 pub(super) fn xlsx_rows(pkg: &mut Package<'_>, path: &str) -> Result<Vec<Vec<String>>, String> {
     let wb = workbook(pkg)?;
     let shared = match wb.shared.as_deref().or(pkg.has("xl/sharedStrings.xml").then_some("xl/sharedStrings.xml")).map(str::to_string) {
-        Some(p) => shared_strings(&pkg.read(&p)?),
+        Some(p) => shared_strings(&pkg.read(&p)?)?,
         None => Vec::new(),
     };
     let formats = match wb.styles.as_deref().or(pkg.has("xl/styles.xml").then_some("xl/styles.xml")).map(str::to_string) {
-        Some(p) => cell_formats(&pkg.read(&p)?),
+        Some(p) => cell_formats(&pkg.read(&p)?)?,
         None => Vec::new(),
     };
     let xml = pkg.read(path)?;
@@ -264,7 +267,7 @@ pub(super) fn xlsx_rows(pkg: &mut Package<'_>, path: &str) -> Result<Vec<Vec<Str
             }
             _ => {}
         },
-    });
+    })?;
     let mut grid = Grid::default();
     for (_, r) in rows {
         grid.push(r, 1);

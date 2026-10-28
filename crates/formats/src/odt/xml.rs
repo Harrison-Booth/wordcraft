@@ -48,7 +48,7 @@ pub(super) enum Ev {
 }
 
 /// Stream XML events (empty elements become start + end). Malformed XML ends the stream.
-pub(super) fn events(xml: &[u8], mut f: impl FnMut(Ev)) {
+pub(super) fn events(xml: &[u8], mut f: impl FnMut(Ev)) -> Result<(), String> {
     let mut r = quick_xml::Reader::from_reader(xml);
     let cfg = r.config_mut();
     cfg.trim_text(false);
@@ -79,7 +79,8 @@ pub(super) fn events(xml: &[u8], mut f: impl FnMut(Ev)) {
                 };
                 f(Ev::Text(s));
             }
-            Ok(Event::Eof) | Err(_) => break,
+            Ok(Event::Eof) => return Ok(()),
+            Err(e) => return Err(format!("ODT XML: {e}")),
             Ok(_) => {}
         }
     }

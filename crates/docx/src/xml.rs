@@ -328,6 +328,7 @@ fn parse_with(bytes: &[u8], extra: &[(&'static str, &str)], strict: bool) -> Res
         None => bytes.strip_prefix(&[0xEF, 0xBB, 0xBF][..]).unwrap_or(bytes),
     };
     let mut r = NsReader::from_reader(bytes);
+    r.resolver_mut().set_max_namespace_bindings(256);
     {
         let c = r.config_mut();
         c.trim_text_start = false;

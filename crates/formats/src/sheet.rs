@@ -101,7 +101,7 @@ pub fn detect(bytes: &[u8]) -> Option<Kind> {
         return None;
     }
     let mut pkg = Package::open(bytes).ok()?;
-    pkg.kind()
+    pkg.kind().ok().flatten()
 }
 
 /// The sheet names, in workbook order.
@@ -110,7 +110,7 @@ pub fn sheet_names(bytes: &[u8]) -> Result<Vec<String>, String> {
         return xls::sheet_names(bytes);
     }
     let mut pkg = Package::open(bytes)?;
-    match pkg.kind().ok_or("not an Excel or OpenDocument spreadsheet")? {
+    match pkg.kind()?.ok_or("not an Excel or OpenDocument spreadsheet")? {
         Kind::Xlsx => Ok(xlsx_sheets(&mut pkg)?.into_iter().map(|s| s.name).collect()),
         Kind::Ods => Ok(ods_read(&pkg.read("content.xml")?, None)?.0),
         Kind::Xls => xls::sheet_names(bytes),
@@ -124,7 +124,7 @@ pub fn read_rows(bytes: &[u8], pick: Pick<'_>) -> Result<(Vec<String>, Vec<Vec<S
         return xls::read_rows(bytes, pick);
     }
     let mut pkg = Package::open(bytes)?;
-    match pkg.kind().ok_or("not an Excel or OpenDocument spreadsheet")? {
+    match pkg.kind()?.ok_or("not an Excel or OpenDocument spreadsheet")? {
         Kind::Xlsx => {
             let sheets = xlsx_sheets(&mut pkg)?;
             let names: Vec<String> = sheets.iter().map(|s| s.name.clone()).collect();
@@ -225,9 +225,9 @@ impl<'a> Package<'a> {
         Ok(out)
     }
 
-    fn kind(&mut self) -> Option<Kind> {
-        if self.workbook_path().is_some() {
-            return Some(Kind::Xlsx);
+    fn kind(&mut self) -> Result<Option<Kind>, String> {
+        if self.workbook_path()?.is_some() {
+            return Ok(Some(Kind::Xlsx));
         }
         if self.has("content.xml") {
             let ods = match self.read("mimetype") {
@@ -236,23 +236,23 @@ impl<'a> Package<'a> {
                 Err(_) => !self.has("word/document.xml"),
             };
             if ods {
-                return Some(Kind::Ods);
+                return Ok(Some(Kind::Ods));
             }
         }
-        None
+        Ok(None)
     }
 
     /// The SpreadsheetML workbook part: the package's main part when it is a workbook,
     /// otherwise `xl/workbook.xml` when present.
-    fn workbook_path(&mut self) -> Option<String> {
+    fn workbook_path(&mut self) -> Result<Option<String>, String> {
         if let Ok(rels) = self.read("_rels/.rels") {
-            for r in relationships(&rels, "") {
+            for r in relationships(&rels, "")? {
                 if r.kind.ends_with("/officeDocument") && r.target.to_ascii_lowercase().contains("workbook") && self.has(&r.target) {
-                    return Some(r.target);
+                    return Ok(Some(r.target));
                 }
             }
         }
-        self.has("xl/workbook.xml").then(|| "xl/workbook.xml".to_string())
+        Ok(self.has("xl/workbook.xml").then(|| "xl/workbook.xml".to_string()))
     }
 }
 
@@ -267,7 +267,7 @@ enum Ev<'e> {
     Text(String),
 }
 
-fn walk(xml: &[u8], mut f: impl FnMut(Ev<'_>)) {
+fn walk(xml: &[u8], mut f: impl FnMut(Ev<'_>)) -> Result<(), String> {
     let mut r = quick_xml::Reader::from_reader(xml);
     let cfg = r.config_mut();
     cfg.trim_text(false);
@@ -309,7 +309,8 @@ fn walk(xml: &[u8], mut f: impl FnMut(Ev<'_>)) {
                 };
                 f(Ev::Text(s));
             }
-            Ok(Event::Eof) | Err(_) => break,
+            Ok(Event::Eof) => return Ok(()),
+            Err(e) => return Err(format!("spreadsheet XML: {e}")),
             Ok(_) => {}
         }
     }
@@ -407,6 +408,11 @@ mod tests {
     #[test]
     fn negative_zero_formats_as_zero() {
         assert_eq!(number(-0.0), "0");
+    }
+
+    #[test]
+    fn malformed_spreadsheet_xml_is_an_error() {
+        assert!(walk(b"<root attr='unterminated", |_| {}).is_err());
     }
 
     fn zip(entries: &[(&str, &str)]) -> Vec<u8> {

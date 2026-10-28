@@ -1108,30 +1108,35 @@ fn meta_creation_date_timezones_and_fallbacks() {
             <dc:creator>Modifier</dc:creator>
             <meta:initial-creator>Original Author</meta:initial-creator>
         </office:meta></office:document-meta>"#;
-    let m = read_meta(xml_neg);
+    let m = read_meta(xml_neg).unwrap();
     assert_eq!(m.created, "2024-03-05T13:45:00-05:00");
     assert_eq!(m.author, "Original Author");
 
     let xml_neg_frac = br#"<office:document-meta><office:meta>
             <meta:creation-date>2024-03-05T13:45:00.500-05:00</meta:creation-date>
         </office:meta></office:document-meta>"#;
-    assert_eq!(read_meta(xml_neg_frac).created, "2024-03-05T13:45:00.500-05:00");
+    assert_eq!(read_meta(xml_neg_frac).unwrap().created, "2024-03-05T13:45:00.500-05:00");
 
     let xml_local_frac = br#"<office:document-meta><office:meta>
             <meta:creation-date>2024-03-05T13:45:00.123</meta:creation-date>
         </office:meta></office:document-meta>"#;
-    assert_eq!(read_meta(xml_local_frac).created, "2024-03-05T13:45:00Z");
+    assert_eq!(read_meta(xml_local_frac).unwrap().created, "2024-03-05T13:45:00Z");
 
     let xml_z_lower = br#"<office:document-meta><office:meta>
             <meta:creation-date>2024-03-05T13:45:00z</meta:creation-date>
         </office:meta></office:document-meta>"#;
-    assert_eq!(read_meta(xml_z_lower).created, "2024-03-05T13:45:00z");
+    assert_eq!(read_meta(xml_z_lower).unwrap().created, "2024-03-05T13:45:00z");
 
     let xml_dc_date_fallback = br#"<office:document-meta><office:meta>
             <dc:date>2024-03-05T13:45:00Z</dc:date>
             <dc:creator>Solo Creator</dc:creator>
         </office:meta></office:document-meta>"#;
-    let m2 = read_meta(xml_dc_date_fallback);
+    let m2 = read_meta(xml_dc_date_fallback).unwrap();
     assert_eq!(m2.created, "2024-03-05T13:45:00Z");
     assert_eq!(m2.author, "Solo Creator");
+}
+
+#[test]
+fn malformed_odt_metadata_xml_is_an_error() {
+    assert!(read_meta(b"<office:document-meta attr='unterminated").is_err());
 }

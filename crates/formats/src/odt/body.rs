@@ -56,7 +56,8 @@ fn read_formula(xml: &[u8]) -> Option<(String, bool)> {
                 }
             }
         }
-    });
+    })
+    .ok()?;
     crate::mathml::read(&math?)
 }
 

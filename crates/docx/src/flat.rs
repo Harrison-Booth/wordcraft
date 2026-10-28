@@ -54,6 +54,7 @@ fn utf8_text(bytes: &[u8]) -> std::borrow::Cow<'_, [u8]> {
 pub fn sniff_xml(bytes: &[u8]) -> XmlKind {
     let text = utf8_text(bytes);
     let mut r = NsReader::from_reader(text.as_ref());
+    r.resolver_mut().set_max_namespace_bindings(256);
     for _ in 0..MAX_PROLOG_EVENTS {
         match r.read_resolved_event() {
             Ok((res, Event::Start(e) | Event::Empty(e))) => {
@@ -119,6 +120,7 @@ pub(crate) fn unpack(bytes: &[u8]) -> Result<Package, DocxError> {
     let text = utf8_text(bytes);
     let src: &[u8] = text.as_ref();
     let mut r = NsReader::from_reader(src);
+    r.resolver_mut().set_max_namespace_bindings(256);
     r.config_mut().check_end_names = true;
     let mut depth = 0usize;
     // Children of the package (parts or anything else), and elements in the current one.

@@ -162,7 +162,7 @@ pub(super) fn ods_read(xml: &[u8], want: Option<usize>) -> Result<(Vec<String>, 
                 _ => {}
             }
         }
-    });
+    })?;
     if names.is_empty() {
         return Err("the spreadsheet has no sheets".into());
     }
