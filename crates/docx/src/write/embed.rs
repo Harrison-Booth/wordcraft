@@ -708,13 +708,16 @@ fn scrub_private(bytes: &[u8], names: bool, dates: bool) -> Option<Vec<u8>> {
     const WML: &str = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
     const WML_STRICT: &str = "http://purl.oclc.org/ooxml/wordprocessingml/main";
     const W15: &str = "http://schemas.microsoft.com/office/word/2012/wordml";
-    // UTF-16 (or other wide encodings) would pass through unread.
-    if bytes.contains(&0) || bytes.starts_with(&[0xFF, 0xFE]) || bytes.starts_with(&[0xFE, 0xFF]) {
-        return None;
-    }
+    let transcoded = crate::xml::utf16_to_utf8(bytes);
+    let bytes = match transcoded.as_deref() {
+        Some(text) => text.as_bytes(),
+        None if bytes.contains(&0) => return None,
+        None => bytes,
+    };
     let ns_is = |r: &ResolveResult, ns: &str| matches!(r, ResolveResult::Bound(n) if n.as_ref() == ns);
     let wml = |r: &ResolveResult| ns_is(r, WML) || ns_is(r, WML_STRICT);
     let mut r = NsReader::from_reader(bytes);
+    r.resolver_mut().set_max_namespace_bindings(256);
     r.config_mut().check_end_names = false;
     let mut out = Writer::new(Vec::with_capacity(bytes.len()));
     let mut buf = Vec::new();
