@@ -653,7 +653,13 @@ fn table_cell_page_field_uses_the_section_number_format() {
     let shown: String = l.pages[0]
         .items
         .iter()
-        .filter_map(|it| if let Placed::Lines { para, path, .. } = it { (path.0.len() > 1).then(|| para.shown.iter().map(|x| x.1.clone()).collect::<String>()) } else { None })
+        .filter_map(|it| {
+            if let Placed::Lines { para, path, .. } = it {
+                (path.0.len() > 1).then(|| para.shown.iter().map(|x| x.1.clone()).collect::<String>())
+            } else {
+                None
+            }
+        })
         .collect();
     assert_eq!(shown, "one");
 }
