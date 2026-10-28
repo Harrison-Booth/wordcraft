@@ -9,7 +9,7 @@ summarizes it; [`gaps.md`](gaps.md) itemizes every shortfall; the deep checklist
 [`hardware-parity.md`](hardware-parity.md) and [`localization-parity.md`](localization-parity.md).
 The generated ribbon checklist is [`parity-checklist.md`](parity-checklist.md).
 
-## Headline (2026-10-10, origin/main `a99dddc`, v0.4.0 + ~90 merged PRs)
+## Headline (2026-10-27, origin/main `4b8b06fe`, v0.11.0)
 
 | Number | Value | Kind |
 |---|---|---|
@@ -207,9 +207,9 @@ Word. Their weighted sum is the **full ready for real work** number.
 ## Methodology
 
 - **Measured** numbers come from the source on origin/main: the catalog/registry diff (the same
-  computation as `cargo xtask parity`), `#[test]` counts, i18n catalog rows, reader/writer element
+  computation as `cargo xtask parity`, run as `wordcraft-cli parity` and `wordcraft-cli commands` on 2026-10-27 at `4b8b06fe`), `#[test]` counts, i18n catalog rows, reader/writer element
   coverage (`grep` over `crates/docx`, `crates/docbin`, `crates/formats`) and the Word bundle
-  listing. Nothing was built or run this pass (disk budget).
+  listing. The 2026-10-27 refresh built `wordcraft-cli` and ran those two commands; the estimates below are not re-run.
 - **Estimated** numbers are judgements from that evidence plus Word's documented feature set. The
   previous estimate (~62% "real feature parity", 2026-10-06) measured feature depth only. This pass
   splits it into feature depth (67%, up: equations, .doc import, RTL, text boxes, Zotero landed) and
