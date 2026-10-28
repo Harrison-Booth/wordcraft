@@ -532,7 +532,13 @@ fn preview(app: &WordApp, ctx: &egui::Context, layout: &DocLayout, o: &ObjectHit
     let b = o.bounds();
     let max_side = ctx.input(|i| i.max_texture_side);
     let px = preview_scale(scale * ctx.pixels_per_point(), b.w, b.h, max_side);
-    let img = wordcraft_render::render_items(&app.session.doc, &items, b.x, b.y, b.w, b.h, px, &opts);
+    let img = wordcraft_render::render_items(
+        &app.session.doc,
+        &items,
+        wordcraft_geom::Rect::new(b.x, b.y, b.w, b.h),
+        px,
+        &opts,
+    );
     // A texture over the device limit panics wgpu outside `Session::run`; fall back to the outline.
     if img.width as usize > max_side || img.height as usize > max_side {
         return None;
