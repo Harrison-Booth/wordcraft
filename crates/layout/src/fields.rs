@@ -308,7 +308,12 @@ fn value_text(fmt: NumFormat, value: f64) -> Option<String> {
     if !size.is_finite() || (bounded_format && size > 1e15) || (0.5..1.0).contains(&size) {
         return None;
     }
-    let n = value.round() as i64;
+    let rounded = value.round();
+    // `i64::MAX as f64` rounds up to 2^63, so use an exclusive upper bound.
+    if rounded < i64::MIN as f64 || rounded >= -(i64::MIN as f64) {
+        return None;
+    }
+    let n = rounded as i64;
     let in_range = |max: u32| u32::try_from(n).ok().filter(|n| *n <= max);
     match fmt {
         NumFormat::CardinalText | NumFormat::OrdinalText => in_range(MAX_TEXT_NUMBER).map(|n| fmt.format(n).to_lowercase()),
@@ -761,6 +766,14 @@ mod tests {
         assert_eq!(field_value("", NumFormat::Decimal, value), "1000000000000001");
         assert_eq!(field_value("", NumFormat::NumberInDash, value), "- 1000000000000001 -");
         assert_eq!(field_value("", NumFormat::Ordinal, value), "1000000000000001st");
+        for (fmt, expected) in [
+            (NumFormat::Decimal, "-9223372036854775808"),
+            (NumFormat::NumberInDash, "- -9223372036854775808 -"),
+            (NumFormat::Ordinal, "-9223372036854775808th"),
+        ] {
+            assert_eq!(field_value("", fmt, 2_f64.powi(63)), NUMBER_FORMAT_ERROR);
+            assert_eq!(field_value("", fmt, -2_f64.powi(63)), expected);
+        }
     }
 
     /// The text argument of a TITLE-like field: quoted text with a backslash making the next
