@@ -256,6 +256,8 @@ layout suite are pending; this is not a new Word/native-IME acceptance claim.
 
 ## Revision history
 
+> 2026-10-27 · `wordcraft-cli convert` reports a Word core font (Times New Roman, Arial, Courier New, Calibri, Cambria) drawn with neither the font nor a metric twin, judged by the substitute that resolution picks; Cousine, Arimo and Tinos now come before non-twin substitutes. Trivial.
+
 > 2026-10-25 · Arabic list labels: `arabicAlpha` and `arabicAbjad` draw the 28 Arabic letters (alphabetical and abjad order), doubling past the last letter; Hebrew, Hindi, Thai and Vietnamese still show decimal (`doc::section::tests::arabic_letters_count_in_both_orders`).
 
 > 2026-10-23 · cu20we review follow-up: Only paragraph-relative box floats use the pre-spacing origin. Line-relative floats and page/margin fallbacks in cells and text boxes keep the text-top origin. Synthetic controls compare zero and 24 pt space-before across all four box contexts. New cap conversion helpers and regression tests document their contracts; readiness estimates unchanged.

@@ -39,10 +39,10 @@ pub fn has_named_substitutes(family: &str) -> bool {
 fn substitutes_by_name(family: &str) -> (&'static [&'static str], bool) {
     const SANS: &[&str] = &["Carlito", "Helvetica Neue", "Arial", "Liberation Sans", "Noto Sans", "DejaVu Sans", "Source Sans 3"];
     const SERIF: &[&str] = &["Caladea", "Times New Roman", "Liberation Serif", "Georgia", "Noto Serif", "DejaVu Serif", "Source Serif 4"];
-    const MONO: &[&str] = &["Courier New", "Liberation Mono", "Menlo", "Consolas", "DejaVu Sans Mono", "JetBrains Mono"];
-    const ARIAL: &[&str] = &["Liberation Sans", "Helvetica", "Helvetica Neue", "Arimo", "Source Sans 3"];
-    const ARIAL_UNICODE: &[&str] = &["Arial", "Liberation Sans", "Helvetica", "Helvetica Neue", "Arimo", "Source Sans 3"];
-    const TIMES: &[&str] = &["Liberation Serif", "Times", "Tinos", "Source Serif 4"];
+    const MONO: &[&str] = &["Courier New", "Liberation Mono", "Cousine", "Menlo", "Consolas", "DejaVu Sans Mono", "JetBrains Mono"];
+    const ARIAL: &[&str] = &["Liberation Sans", "Arimo", "Helvetica", "Helvetica Neue", "Source Sans 3"];
+    const ARIAL_UNICODE: &[&str] = &["Arial", "Liberation Sans", "Arimo", "Helvetica", "Helvetica Neue", "Source Sans 3"];
+    const TIMES: &[&str] = &["Liberation Serif", "Tinos", "Times", "Source Serif 4"];
     // Word's symbol fonts (Symbol, Wingdings…) are proprietary: their characters are drawn as their
     // Unicode equivalents (`wordcraft_doc::symbol_fonts`) from these faces or any face that has them.
     const SYMBOL: &[&str] = &["Apple Symbols", "Segoe UI Symbol", "DejaVu Sans", "Noto Sans Symbols", "Noto Sans Symbols 2", "Source Sans 3"];
@@ -371,13 +371,20 @@ const METRIC_TWINS: &[(&str, &[&str])] = &[
     ("Cambria", &["Caladea"]),
 ];
 
-/// The Word core families with neither the font nor a metric-compatible twin installed, each with
+/// Is Word's core family `word` drawn with itself or a metric twin? Judged by the substitute that
+/// resolution picks, not by what is installed: a twin that comes after another font in the
+/// substitute list is not the one drawn.
+fn has_metric_match(db: &FontDb, word: &str, twins: &[&str]) -> bool {
+    db.has_family(word) || substitute(db, word).is_some_and(|s| twins.contains(&s))
+}
+
+/// The Word core families drawn with neither the font nor a metric-compatible twin, each with
 /// the family drawn in its place: lines and pages measured with those won't match Word's.
 pub fn missing_metric_fonts() -> Vec<(&'static str, &'static str)> {
     let db = FontDb::global();
     METRIC_TWINS
         .iter()
-        .filter(|(word, twins)| !db.has_family(word) && !twins.iter().any(|t| db.has_family(t)))
+        .filter(|(word, twins)| !has_metric_match(db, word, twins))
         .map(|(word, _)| (*word, substitute(db, word).unwrap_or(crate::FALLBACK_FAMILY)))
         .collect()
 }
@@ -718,13 +725,13 @@ mod tests {
     }
 
     #[test]
-    fn a_missing_core_font_is_reported_only_without_a_metric_twin() {
+    fn a_missing_core_font_is_reported_only_when_a_metric_twin_is_not_the_one_drawn() {
         let db = FontDb::global();
         let missing = missing_metric_fonts();
         for (word, twins) in METRIC_TWINS {
             let reported = missing.iter().any(|(w, _)| w == word);
-            let covered = db.has_family(word) || twins.iter().any(|t| db.has_family(t));
-            assert_eq!(reported, !covered, "{word}");
+            let drawn = if db.has_family(word) { Some(*word) } else { substitute(db, word) };
+            assert_eq!(reported, !drawn.is_some_and(|d| d == *word || twins.contains(&d)), "{word}");
         }
         assert!(missing.iter().all(|(_, used)| db.has_family(used)));
     }
