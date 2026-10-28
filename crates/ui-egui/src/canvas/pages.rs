@@ -1,4 +1,4 @@
-use super::*;
+use super::{DocLayout, Hash, Hasher, Page, Placed, Pos, Pos2, Rect, StoryRef, WordApp, json, pos2};
 
 /// Fingerprint of everything outside the layout that changes how pages render: the view's
 /// marks and markup, dark mode, the page colour and watermark, header/body dimming, the media,
@@ -184,6 +184,18 @@ pub(super) fn drawing_grid_step(spacing: f32, scale: f32) -> f32 {
 /// hovering over (#3931). The preview is laid out on a copy, so the document and its undo history
 /// change only when a square is clicked.
 pub(super) fn shown_layout(app: &mut WordApp) -> std::sync::Arc<DocLayout> {
+    if let Some(command) = app.canvas.format_preview.take() {
+        let key = ((command.to_string(), app.session.document_id(), app.session.rev(), app.session.sel.clone()), app.session.layout());
+        if let Some((k, _, _, l)) = &app.canvas.format_preview_layout
+            && k.0 == key.0
+            && std::sync::Arc::ptr_eq(&k.1, &key.1)
+        {
+            return l.clone();
+        }
+        app.canvas.format_preview_layout = app.session.preview_layout(command, &json!({})).map(|(doc, sel, layout)| (key, doc, sel, layout));
+        return app.canvas.format_preview_layout.as_ref().map_or_else(|| app.session.layout(), |(_, _, _, l)| l.clone());
+    }
+    app.canvas.format_preview_layout = None;
     let Some((rows, cols)) = app.canvas.table_preview.take() else {
         app.canvas.table_preview_layout = None;
         return app.session.layout();
@@ -212,13 +224,16 @@ pub(super) fn shown_layout(app: &mut WordApp) -> std::sync::Arc<DocLayout> {
 /// The document the pages of [`shown_layout`] are drawn from: the previewed copy while the page
 /// shows Insert › Table's preview, whose paragraph paths are the layout's (#3931).
 pub(crate) fn page_doc(app: &WordApp) -> &wordcraft_doc::Document {
-    app.canvas.table_preview_layout.as_ref().map_or(&app.session.doc, |(_, doc, _, _)| doc)
+    app.canvas
+        .format_preview_layout
+        .as_ref()
+        .map_or_else(|| app.canvas.table_preview_layout.as_ref().map_or(&app.session.doc, |(_, doc, _, _)| doc), |(_, doc, _, _)| doc)
 }
 
 /// The previewed copy's selection while the page shows Insert › Table's preview: the caret and
 /// selection are drawn from it, as the document's own name other places in the preview's layout.
 pub(crate) fn preview_sel(app: &WordApp) -> Option<&wordcraft_engine::Selection> {
-    app.canvas.table_preview_layout.as_ref().map(|(_, _, sel, _)| sel)
+    app.canvas.format_preview_layout.as_ref().map(|(_, _, sel, _)| sel).or_else(|| app.canvas.table_preview_layout.as_ref().map(|(_, _, sel, _)| sel))
 }
 
 /// Render options for this view's page rasters: marks, markup, dark page, header/body dimming.
