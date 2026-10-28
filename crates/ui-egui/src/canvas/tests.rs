@@ -60,6 +60,26 @@ fn the_preview_draws_the_copy_caret_and_selection() {
     assert!(preview_sel(&app).is_none(), "no preview: the document's own selection");
 }
 
+#[test]
+fn bold_and_italic_previews_leave_the_document_and_undo_state_untouched_in_both_themes() {
+    for dark in [false, true] {
+        let mut app = WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::from_text("Lanterns")), crate::Services::default());
+        app.session.view.dark_mode = dark;
+        app.session.sel = wordcraft_engine::Selection { anchor: Pos::body(0, 0), focus: Pos::body(0, 8) };
+        let (rev, dirty, undo) = (app.session.rev(), app.session.dirty, app.session.can_undo());
+        for command in ["format.bold", "format.italic"] {
+            app.canvas.format_preview = Some(command);
+            let _ = shown_layout(&mut app);
+            assert!(app.canvas.format_preview_layout.is_some(), "{command} preview exists");
+            assert_eq!((app.session.rev(), app.session.dirty, app.session.can_undo()), (rev, dirty, undo));
+            app.canvas.format_preview = None;
+            let _ = shown_layout(&mut app);
+            assert!(app.canvas.format_preview_layout.is_none(), "pointer exit restores the document");
+            assert_eq!((app.session.rev(), app.session.dirty, app.session.can_undo()), (rev, dirty, undo));
+        }
+    }
+}
+
 /// #3931 review: the preview is laid out again when the caret moves or the view changes with
 /// the grid still hovered, so the page shows the table where a click would put it, at the
 /// view's width.

@@ -280,8 +280,23 @@ fn content(app: &mut WordApp, ui: &mut egui::Ui, t: &Tokens) {
     });
 
     row(ui, app, &|ui, app| {
-        widgets::small(ui, app, "bold", None, "Bold", crate::widgets::ButtonAction::new("format.bold", json!({}), flag("bold")));
-        widgets::small(ui, app, "italic", None, "Italic", crate::widgets::ButtonAction::new("format.italic", json!({}), flag("italic")));
+        let bold = widgets::small(ui, app, "bold", None, "Bold", crate::widgets::ButtonAction::new("format.bold", json!({}), flag("bold")));
+        let italic = widgets::small(ui, app, "italic", None, "Italic", crate::widgets::ButtonAction::new("format.italic", json!({}), flag("italic")));
+        let over_bold = bold.hovered() && !bold.clicked() && widgets::enabled(app, "format.bold");
+        let over_italic = italic.hovered() && !italic.clicked() && widgets::enabled(app, "format.italic");
+        let over_preview = over_bold || over_italic;
+        if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+            app.canvas.format_preview_suppressed = true;
+        } else if !over_preview {
+            app.canvas.format_preview_suppressed = false;
+        }
+        app.canvas.format_preview = if over_preview && !app.canvas.format_preview_suppressed && over_bold {
+            Some("format.bold")
+        } else if over_preview && !app.canvas.format_preview_suppressed && over_italic {
+            Some("format.italic")
+        } else {
+            None
+        };
         widgets::small(ui, app, "underline", None, "Underline", crate::widgets::ButtonAction::new("format.underline", json!({}), flag("underline")));
         widgets::small(
             ui,

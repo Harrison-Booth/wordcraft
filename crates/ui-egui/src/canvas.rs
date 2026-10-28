@@ -270,15 +270,20 @@ pub struct CanvasState {
     /// The rows and columns hovered in Insert › Table's grid this frame: the page shows that
     /// table where it would go (#3931). Set by the grid each frame, taken by [`show`].
     pub(crate) table_preview: Option<(usize, usize)>,
+    /// Bold or Italic hovered in the mini toolbar this frame.
+    pub(crate) format_preview: Option<&'static str>,
+    pub(crate) format_preview_suppressed: bool,
     /// The last previewed table's layout, the copy of the document it was laid out from and the
     /// copy's selection, with
     /// what it was laid out for (rows, columns, document id, revision, selection, and the
     /// document's own layout, which a view change replaces), so a still pointer doesn't lay the
     /// document out every frame. Set only while the page shows the preview.
     table_preview_layout: Option<(TablePreviewKey, wordcraft_doc::Document, wordcraft_engine::Selection, std::sync::Arc<DocLayout>)>,
+    format_preview_layout: Option<(FormatPreviewKey, wordcraft_doc::Document, wordcraft_engine::Selection, std::sync::Arc<DocLayout>)>,
 }
 
 type TablePreviewKey = ((usize, usize, u64, u64, wordcraft_engine::Selection), std::sync::Arc<DocLayout>);
+type FormatPreviewKey = ((String, u64, u64, wordcraft_engine::Selection), std::sync::Arc<DocLayout>);
 
 impl CanvasState {
     /// Another document is shown in the window: everything about the page that was shown (drags,
@@ -424,6 +429,9 @@ impl Default for CanvasState {
             drawn_ibeam: crate::ibeam::DRAWN,
             table_preview: None,
             table_preview_layout: None,
+            format_preview: None,
+            format_preview_suppressed: false,
+            format_preview_layout: None,
         }
     }
 }
