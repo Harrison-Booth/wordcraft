@@ -662,6 +662,7 @@ mod tests {
     /// others are rounded first. Word 16.0 (build 16.0.20527), 2026-10-26, for `=` fields with the
     /// same results.
     #[test]
+    #[allow(clippy::cognitive_complexity)]
     fn numbers_outside_a_format_show_words_error() {
         let shown = |instr: &str, fmt: NumFormat, value: f64| field_value(instr, fmt, value);
         let error = NUMBER_FORMAT_ERROR;
@@ -749,14 +750,17 @@ mod tests {
         assert_eq!(shown("", NumFormat::Ordinal, 2.5), "3rd");
         assert_eq!(shown("", NumFormat::Ordinal, -1.0), "-1st");
         assert_eq!(shown("", NumFormat::Ordinal, 1_000_000.0), "1000000th");
-        for (fmt, expected) in
-            [(NumFormat::Decimal, "1000000000000001"), (NumFormat::NumberInDash, "- 1000000000000001 -"), (NumFormat::Ordinal, "1000000000000001st")]
-        {
-            assert_eq!(shown("", fmt, 1_000_000_000_000_001.0), expected);
-        }
         // Page-number fields use the same rules.
         assert_eq!(field_number(r"SEQ x \* Upper", NumFormat::CardinalText, 1_000_140), error.to_uppercase());
         assert_eq!(field_number("SEQ x", NumFormat::CardinalText, 999_999), "nine hundred ninety-nine thousand nine hundred ninety-nine");
+    }
+
+    #[test]
+    fn unbounded_numeric_field_formats_accept_large_values() {
+        let value = 1_000_000_000_000_001.0;
+        assert_eq!(field_value("", NumFormat::Decimal, value), "1000000000000001");
+        assert_eq!(field_value("", NumFormat::NumberInDash, value), "- 1000000000000001 -");
+        assert_eq!(field_value("", NumFormat::Ordinal, value), "1000000000000001st");
     }
 
     /// The text argument of a TITLE-like field: quoted text with a backslash making the next
