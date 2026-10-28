@@ -1771,6 +1771,14 @@ fn activex_control_takes_the_shape_it_names() {
     assert_eq!(attr_values(&body, "v:shape", "style")[0], "width:50pt;height:20pt", "{body}");
 }
 
+/// The control's alt text, from its VML shape, survives a save.
+#[test]
+fn activex_control_keeps_its_alt_text() {
+    let body =
+        activex_round_trip(r##"<v:shape id="control_shape_1" alt="Accept terms" style="width:11.05pt;height:7.3pt" type="#_x0000_t75"></v:shape>"##);
+    assert_eq!(attr_values(&body, "v:shape", "alt"), ["Accept terms"], "{body}");
+}
+
 /// Reads the control in `shapes` and writes it back; returns the written document body.
 fn activex_round_trip(shapes: &str) -> String {
     let body =

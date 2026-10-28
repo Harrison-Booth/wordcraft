@@ -342,8 +342,8 @@ impl Reader<'_> {
     pub(super) fn read_object(&mut self, sc: &mut StoryCtx, obj: &El, rels: &Rels) -> Option<InlineObject> {
         let mut o = match self.read_vml(sc, obj, rels) {
             Some(o) => o,
-            None => match obj.child("w:drawing") {
-                Some(d) => self.read_drawing(sc, d, rels)?,
+            None => match obj.child("w:drawing").and_then(|d| self.read_drawing(sc, d, rels)) {
+                Some(o) => o,
                 None => return self.read_control(sc, obj, rels),
             },
         };
@@ -357,6 +357,9 @@ impl Reader<'_> {
         }
         if let InlineObject::Image { ole, .. } = &mut o {
             *ole = self.keep_embedded(obj, rels, &[]);
+            if ole.is_none() && obj.child("w:control").is_some() {
+                log::warn!("docx: an ActiveX control's parts can't be kept; its image is kept without the control");
+            }
         }
         Some(o)
     }
@@ -378,7 +381,7 @@ impl Reader<'_> {
             log::warn!("docx: an ActiveX control's parts can't be kept; it is left out");
             return None;
         };
-        Some(InlineObject::Shape {
+        let mut o = InlineObject::Shape {
             kind: ShapeKind::Rectangle,
             w: len("width"),
             h: len("height"),
@@ -390,7 +393,10 @@ impl Reader<'_> {
             freeform: None,
             effects: Default::default(),
             extra: ShapeExtra { ole: Some(ole), ..Default::default() },
-        })
+        };
+        // The control's description (its VML shape's alt text) stays on the placeholder.
+        o.set_alt_text(shape.attr("alt").unwrap_or(""));
+        Some(o)
     }
 
     /// A Word signature line (Insert › Signature Line): a `w:pict` whose one VML picture carries
