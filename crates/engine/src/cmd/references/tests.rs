@@ -1,3 +1,4 @@
+use super::properties::{new_property_value, text_result};
 use super::*;
 
 fn fields(s: &Session) -> Vec<(String, String)> {
@@ -410,7 +411,7 @@ fn update_fields_apply_the_capitalization_switches() {
             "seventh",
             "Seventh",
             "BUDGET",
-            "new \\* Upper"
+            "new * Upper"
         ]
     );
 }

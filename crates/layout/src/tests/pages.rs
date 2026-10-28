@@ -634,6 +634,45 @@ fn body_page_field_uses_the_section_number_format() {
     assert_eq!(shown, ["one", "ONE"], "{shown:?}");
 }
 
+#[test]
+fn reflow_page_field_uses_the_current_section_number_format() {
+    let mut d = Document::from_text("First section\nSecond section");
+    let first = d.last_section.clone();
+    d.para_mut(StoryRef::Body, &Path::top(0)).unwrap().section = Some(Box::new(first));
+    d.last_section.page_num_format = wordcraft_doc::section::NumFormat::CardinalText;
+    let p = d.para_mut(StoryRef::Body, &Path::top(1)).unwrap();
+    let off = p.len();
+    p.insert_object(
+        off,
+        InlineObject::Field { instr: "PAGE".into(), result: "1".into(), locked: false, dirty: false, code: false, form: String::new() },
+        &Default::default(),
+    )
+    .unwrap();
+
+    for view in [ViewMode::Web, ViewMode::Draft, ViewMode::Read, ViewMode::Outline] {
+        let mut cache = LayoutCache::new();
+        let layout = layout(&d, &mut cache, &LayoutOptions { view, ..Default::default() });
+        let shown: Vec<_> = layout
+            .pages
+            .iter()
+            .flat_map(|page| {
+                page.items.iter().filter_map(move |item| {
+                    if let Placed::Lines { para, path, .. } = item {
+                        (path == &Path::top(1)).then(|| (page.number, para.shown.iter().map(|x| x.1.as_str()).collect::<String>()))
+                    } else {
+                        None
+                    }
+                })
+            })
+            .collect();
+        assert!(!shown.is_empty(), "{view:?}: no second-section text");
+        for (number, text) in shown {
+            let expected = wordcraft_doc::section::NumFormat::CardinalText.format(number).to_lowercase();
+            assert!(text.ends_with(&expected), "{view:?}, page {number}: {text:?}, expected {expected:?}");
+        }
+    }
+}
+
 /// A PAGE field in a table that opens the body uses the section's number format too: the table
 /// is placed without the paragraph path that sets it.
 #[test]
