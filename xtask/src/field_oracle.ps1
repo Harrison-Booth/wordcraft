@@ -31,8 +31,12 @@ try {
     }
     foreach ($entry in $fields) {
         try {
-            [void]$entry.Field.Update()
-            $results[$entry.Index] = $entry.Field.Result.Text
+            $updated = $entry.Field.Update()
+            if ($updated) {
+                $results[$entry.Index] = $entry.Field.Result.Text
+            } else {
+                $errors[$entry.Index] = 'Field.Update returned False'
+            }
         } catch { $errors[$entry.Index] = $_.Exception.Message }
     }
     for ($i = 0; $i -lt $codes.Count; $i++) {
