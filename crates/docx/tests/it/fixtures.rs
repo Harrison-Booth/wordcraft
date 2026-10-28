@@ -61,6 +61,17 @@ fn fit_text_width_and_group_id_survive_two_save_reopen_cycles() {
 }
 
 #[test]
+fn fit_text_without_width_is_omitted_on_save() {
+    let mut doc = read_body(r#"<w:p><w:r><w:rPr><w:fitText w:id="1"/></w:rPr><w:t>text</w:t></w:r></w:p>"#);
+    let para = doc.body.first().and_then(|b| b.as_para()).unwrap();
+    assert_eq!(para.runs.first().and_then(|r| r.props.fit_text.as_ref()).and_then(|f| f.width), None);
+
+    doc = wordcraft_docx::read(&wordcraft_docx::write(&doc).unwrap()).unwrap();
+    let para = doc.body.first().and_then(|b| b.as_para()).unwrap();
+    assert_eq!(para.runs.first().and_then(|r| r.props.fit_text.as_ref()), None);
+}
+
+#[test]
 fn repeated_style_ids_use_last() {
     let styles = format!(
         r#"<w:styles {W_NS}>

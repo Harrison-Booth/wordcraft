@@ -94,7 +94,7 @@ pub fn rpr_inner(w: &mut W, c: &CharProps) {
     if let Some(s) = c.shading {
         w.empty("w:shd", &[("w:val", "clear"), ("w:color", "auto"), ("w:fill", &s.hex())]);
     }
-    if let Some(f) = &c.fit_text {
+    if let Some(f) = c.fit_text.as_ref().filter(|f| f.width.is_some()) {
         let width = f.width.map(|v| v.min(wordcraft_doc::props::MAX_FIT_TEXT_WIDTH).to_string());
         let id = f.id.map(|v| v.to_string());
         let mut attrs = Vec::new();
