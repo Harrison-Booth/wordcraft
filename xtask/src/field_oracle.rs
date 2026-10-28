@@ -75,9 +75,6 @@ fn windows_path(p: &Path) -> Result<String, String> {
 }
 
 fn word_results(codes: &[String]) -> Result<Vec<String>, String> {
-    if codes.iter().any(|c| c.contains('\n')) {
-        return Err("a field code cannot contain a newline".into());
-    }
     // A script file, not `-Command -`: PowerShell reads a piped multi-line script line by line and runs nothing.
     let dir = std::env::temp_dir().join(format!("field-oracle-word-{}", std::process::id()));
     std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
@@ -172,13 +169,13 @@ fn wordcraft_results(codes: &[String], cli: Option<&Path>) -> Result<Vec<String>
     split_paragraphs(&run?, codes.len())
 }
 
-/// The first `n` lines of the saved text (a trailing line break and the empty last paragraph are not results).
+/// The `n` lines of the saved text, one per code: the empty last paragraph only adds the final line break.
 pub fn split_paragraphs(text: &str, n: usize) -> Result<Vec<String>, String> {
     let lines: Vec<&str> = text.lines().collect();
-    if lines.len() < n {
-        return Err(format!("WordCraft saved {} paragraphs for {n} codes (a result with a line break?)", lines.len()));
+    if lines.len() != n {
+        return Err(format!("WordCraft saved {} lines for {n} codes (a result with a line break?)", lines.len()));
     }
-    Ok(lines.iter().take(n).map(|l| l.trim_end().to_string()).collect())
+    Ok(lines.iter().map(|l| l.trim_end().to_string()).collect())
 }
 
 fn cell(s: &str) -> String {
@@ -237,6 +234,9 @@ pub fn run(root: &Path, args: &[&str]) -> Result<(), String> {
     if codes.is_empty() {
         return Err(format!("no field codes given\n\n{USAGE}"));
     }
+    if let Some(c) = codes.iter().find(|c| c.contains(['\n', '\r'])) {
+        return Err(format!("a field code cannot contain a line break: {c:?}"));
+    }
     let wc = wordcraft_results(&codes, cli.as_deref())?;
     let word = if no_word { None } else { Some(word_results(&codes)?) };
     let md = table(&codes, word.as_deref(), &wc);
@@ -284,7 +284,8 @@ mod tests {
 
     #[test]
     fn paragraphs_drop_the_trailing_empty_one() {
-        assert_eq!(split_paragraphs("x\ny  \n\n", 2).unwrap(), ["x", "y"]);
+        assert_eq!(split_paragraphs("x\ny  \n", 2).unwrap(), ["x", "y"]);
+        assert!(split_paragraphs("x\nembedded\ny\n", 2).is_err());
         assert!(split_paragraphs("x\n", 2).is_err());
     }
 }

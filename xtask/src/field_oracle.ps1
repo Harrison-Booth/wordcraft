@@ -1,7 +1,7 @@
 # Runs field codes in real Word through COM. Driven by `cargo xtask field-oracle`, which defines
 # $codeHex (hex of the UTF-8 codes, one per line, newline-joined) before this text and reads one
 # `index<TAB>hex-of-result` line per code from stdout. Only temporary documents are used: alerts
-# are off, documents close without saving, and only a Word this script started is killed.
+# are off, documents close without saving, and the Word instance this script started is quit in cleanup.
 $ErrorActionPreference = 'Stop'
 function FromHex([string]$h) {
     if ($h.Length -eq 0) { return '' }
@@ -11,7 +11,6 @@ function FromHex([string]$h) {
 }
 function ToHex([string]$s) { -join ([Text.Encoding]::UTF8.GetBytes($s) | ForEach-Object { $_.ToString('x2') }) }
 
-$before = @(Get-Process WINWORD -ErrorAction SilentlyContinue | ForEach-Object { $_.Id })
 $word = $null
 try {
     $word = New-Object -ComObject Word.Application
@@ -32,5 +31,4 @@ try {
     $doc.Close(0)
 } finally {
     if ($word) { try { $word.Quit(0) } catch {} }
-    Get-Process WINWORD -ErrorAction SilentlyContinue | Where-Object { $before -notcontains $_.Id } | Stop-Process -Force
 }
