@@ -192,6 +192,7 @@ fn every_para_prop_round_trips() {
         borders: Some(Borders { top: Some(b), left: Some(Border::single(0.5)), bottom: Some(b), right: None, between: Some(b), inside_v: None }),
         suppress_hyphens: Some(true),
         suppress_line_numbers: Some(true),
+        suppress_overlap: Some(false),
         bidi: Some(false),
         drop_cap: None,
         drop_cap_margin: None,

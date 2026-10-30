@@ -330,6 +330,7 @@ impl PropCtx {
                 "w:mirrorIndents" => p.mirror_indents = Some(on_off(k)),
                 "w:suppressAutoHyphens" => p.suppress_hyphens = Some(on_off(k)),
                 "w:suppressLineNumbers" => p.suppress_line_numbers = Some(on_off(k)),
+                "w:suppressOverlap" => p.suppress_overlap = Some(on_off(k)),
                 "w:bidi" => p.bidi = Some(on_off(k)),
                 "w:kinsoku" => p.kinsoku = Some(on_off(k)),
                 "w:wordWrap" => p.word_wrap = Some(on_off(k)),

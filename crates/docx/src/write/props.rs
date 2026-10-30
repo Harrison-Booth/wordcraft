@@ -268,6 +268,7 @@ pub fn ppr_inner(w: &mut W, p: &ParaProps, framed: bool, num_change: Option<&Cha
         w.close("w:numPr");
     }
     toggle(w, "w:suppressLineNumbers", p.suppress_line_numbers);
+    toggle(w, "w:suppressOverlap", p.suppress_overlap);
     if let Some(b) = &p.borders {
         borders(w, "w:pBdr", b, Some("w:between"), &[]);
     }
