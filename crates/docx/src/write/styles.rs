@@ -1,5 +1,13 @@
 use super::{Document, Level, LevelSuffix, ParaProps, Style, StyleKind, TablePart, VAlign, W, props, xml};
 
+fn tc_fit_text(w: &mut W, fit_text: Option<bool>) {
+    match fit_text {
+        Some(true) => w.empty("w:tcFitText", &[]),
+        Some(false) => w.val("w:tcFitText", "0"),
+        None => {}
+    }
+}
+
 /// Built-in names Word keeps in lower case in styles.xml.
 fn file_style_name(name: &str) -> String {
     if let Some((f, _)) = crate::read::LOWER_NAMES.iter().find(|(_, ui)| ui.eq_ignore_ascii_case(name)) {
@@ -171,11 +179,7 @@ fn style_xml(w: &mut W, st: &Style, flagged: &[StyleKind]) {
                         },
                     );
                 }
-                match f.fit_text {
-                    Some(true) => w.empty("w:tcFitText", &[]),
-                    Some(false) => w.val("w:tcFitText", "0"),
-                    None => {}
-                }
+                tc_fit_text(w, f.fit_text);
                 w.close("w:tcPr");
             }
             w.close("w:tblStylePr");
