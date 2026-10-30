@@ -54,3 +54,51 @@ fn an_empty_row_exception_element_is_kept() {
     let xml = document_xml(&wordcraft_docx::write(&d).unwrap());
     assert!(xml.contains("<w:tblPrEx></w:tblPrEx>") || xml.contains("<w:tblPrEx/>"), "{xml}");
 }
+
+#[test]
+fn table_cell_spacing_survives_table_and_row_exception_roundtrips() {
+    let ex = r#"<w:tblPrEx><w:tblCellSpacing w:w="120" w:type="dxa"/></w:tblPrEx>"#;
+    let body = format!(
+        r#"<w:tbl><w:tblPr><w:tblCellSpacing w:w="120" w:type="dxa"/></w:tblPr><w:tblGrid><w:gridCol w:w="2000"/></w:tblGrid>{}</w:tbl><w:p/>"#,
+        row(ex, "A")
+    );
+    let first = wordcraft_docx::read(&docx(&body)).unwrap();
+    let table = first.body.iter().find_map(|b| b.as_table()).unwrap();
+    assert_eq!(table.props.cell_spacing, Some(wordcraft_doc::props::CellSpacing { width: 120, kind: wordcraft_doc::props::CellSpacingKind::Dxa }));
+    assert_eq!(table.rows[0].props.exceptions.as_ref().unwrap().cell_spacing, table.props.cell_spacing);
+    let json = serde_json::to_string(&first).unwrap();
+    assert!(json.contains("cellSpacing"));
+    let mut bytes = wordcraft_docx::write(&first).unwrap();
+    for _ in 0..2 {
+        let xml = document_xml(&bytes);
+        assert_eq!(xml.matches(r#"<w:tblCellSpacing w:w="120" w:type="dxa"/>"#).count(), 2, "{xml}");
+        bytes = wordcraft_docx::write(&wordcraft_docx::read(&bytes).unwrap()).unwrap();
+    }
+}
+
+#[test]
+fn table_cell_spacing_preserves_supported_types_and_bounds_hostile_widths() {
+    use wordcraft_doc::props::{CellSpacing, CellSpacingKind};
+
+    let make_table = |spacing: &str| {
+        format!(r#"<w:tbl><w:tblPr>{spacing}</w:tblPr><w:tblGrid><w:gridCol w:w="2000"/></w:tblGrid><w:tr><w:tc><w:p/></w:tc></w:tr></w:tbl>"#)
+    };
+    let cases = [
+        (r#"<w:tblCellSpacing w:w="0" w:type="dxa"/>"#, Some(CellSpacing { width: 0, kind: CellSpacingKind::Dxa })),
+        (r#"<w:tblCellSpacing w:w="240" w:type="pct"/>"#, Some(CellSpacing { width: 240, kind: CellSpacingKind::Pct })),
+        (r#"<w:tblCellSpacing w:w="1" w:type="auto"/>"#, Some(CellSpacing { width: 1, kind: CellSpacingKind::Auto })),
+        (r#"<w:tblCellSpacing w:w="2" w:type="nil"/>"#, Some(CellSpacing { width: 2, kind: CellSpacingKind::Nil })),
+        (r#"<w:tblCellSpacing w:w="31681" w:type="dxa"/>"#, Some(CellSpacing { width: 31680, kind: CellSpacingKind::Dxa })),
+        (r#"<w:tblCellSpacing w:w="999999" w:type="pct"/>"#, Some(CellSpacing { width: 50000, kind: CellSpacingKind::Pct })),
+        (r#"<w:tblCellSpacing w:w="-1" w:type="dxa"/>"#, None),
+        (r#"<w:tblCellSpacing w:w="oops" w:type="dxa"/>"#, None),
+        (r#"<w:tblCellSpacing w:w="12" w:type="unsupported"/>"#, None),
+        ("", None),
+    ];
+    for (spacing, expected) in cases {
+        let body = format!("{}<w:p/>", make_table(spacing));
+        let doc = wordcraft_docx::read(&docx(&body)).unwrap();
+        let table = doc.body.iter().find_map(|b| b.as_table()).unwrap();
+        assert_eq!(table.props.cell_spacing, expected, "{spacing}");
+    }
+}

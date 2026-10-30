@@ -527,6 +527,9 @@ fn tblpr_inner(w: &mut W, t: &TableProps) {
     if let Some(m) = &t.cell_margins {
         margins(w, "w:tblCellMar", m);
     }
+    if let Some(v) = t.cell_spacing {
+        w.empty("w:tblCellSpacing", &[("w:w", &v.width.to_string()), ("w:type", v.kind.ooxml())]);
+    }
     let look = look_attrs(&t.look);
     let refs: Vec<(&str, &str)> = look.iter().map(|(k, v)| (*k, v.as_str())).collect();
     w.empty("w:tblLook", &refs);
@@ -581,6 +584,9 @@ fn tblprex(w: &mut W, t: &TableProps) {
     }
     if let Some(m) = &t.cell_margins {
         margins(w, "w:tblCellMar", m);
+    }
+    if let Some(v) = t.cell_spacing {
+        w.empty("w:tblCellSpacing", &[("w:w", &v.width.to_string()), ("w:type", v.kind.ooxml())]);
     }
     w.close("w:tblPrEx");
 }
