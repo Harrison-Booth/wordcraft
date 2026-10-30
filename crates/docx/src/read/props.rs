@@ -658,6 +658,7 @@ pub fn tcpr(pc: &PropCtx, e: &El) -> (CellProps, bool) {
             "w:tcBorders" => c.borders = Some(borders(k)),
             "w:shd" => c.shading = pc.shd_fill(k),
             "w:noWrap" => c.no_wrap = on_off(k),
+            "w:tcFitText" => c.fit_text = Some(on_off(k)),
             "w:hideMark" => c.hide_mark = on_off(k),
             "w:tcMar" => {
                 let sides = margin_sides(k);

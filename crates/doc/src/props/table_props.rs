@@ -331,6 +331,9 @@ pub struct CellProps {
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub text_direction_set: bool,
     pub no_wrap: bool,
+    /// Fit text in the cell by condensing it (`w:tcFitText`); unset inherits.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fit_text: Option<bool>,
     /// The cell's last paragraph takes no room when it is empty (`w:hideMark`): a row of such
     /// empty cells shrinks to its borders.
     #[serde(skip_serializing_if = "std::ops::Not::not")]

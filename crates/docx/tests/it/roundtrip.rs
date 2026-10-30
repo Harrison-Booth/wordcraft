@@ -617,6 +617,7 @@ fn every_table_style_part_round_trips() {
             }),
             align: aligns.get(i % 3).copied(),
             v_align: valigns.get(i % 3).copied(),
+            fit_text: (i % 2 == 0).then_some(i % 3 != 0),
         };
         st.set_table_part(part, f);
     }

@@ -138,7 +138,7 @@ fn style_xml(w: &mut W, st: &Style, flagged: &[StyleKind]) {
             let has_rpr = props::has_rpr(&f.chr);
             // The whole table's borders are its table borders (`w:tblPr` above).
             let borders = f.borders.filter(|_| part != TablePart::WholeTable);
-            let has_tc = f.fill.is_some() || borders.is_some() || f.v_align.is_some();
+            let has_tc = f.fill.is_some() || borders.is_some() || f.v_align.is_some() || f.fit_text.is_some();
             if !has_rpr && !has_tc && f.align.is_none() {
                 continue;
             }
@@ -170,6 +170,11 @@ fn style_xml(w: &mut W, st: &Style, flagged: &[StyleKind]) {
                             VAlign::Bottom => "bottom",
                         },
                     );
+                }
+                match f.fit_text {
+                    Some(true) => w.empty("w:tcFitText", &[]),
+                    Some(false) => w.val("w:tcFitText", "0"),
+                    None => {}
                 }
                 w.close("w:tcPr");
             }

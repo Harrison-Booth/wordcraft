@@ -653,6 +653,7 @@ fn tcpr_inner(w: &mut W, c: &CellProps) {
     if c.no_wrap {
         w.empty("w:noWrap", &[]);
     }
+    toggle(w, "w:tcFitText", c.fit_text);
     if let Some(m) = &c.margins {
         margins(w, "w:tcMar", m);
     } else if let Some(m) = &c.partial_margins {
