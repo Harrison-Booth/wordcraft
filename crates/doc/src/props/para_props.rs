@@ -171,17 +171,21 @@ pub struct Borders {
     pub between: Option<Border>,
     /// Inside vertical (tables).
     pub inside_v: Option<Border>,
+    /// Cell diagonal from top-left to bottom-right (`w:tl2br`).
+    pub tl2br: Option<Border>,
+    /// Cell diagonal from top-right to bottom-left (`w:tr2bl`).
+    pub tr2bl: Option<Border>,
 }
 
 impl Borders {
     pub fn all(b: Border) -> Borders {
-        Borders { top: Some(b), left: Some(b), bottom: Some(b), right: Some(b), between: Some(b), inside_v: Some(b) }
+        Borders { top: Some(b), left: Some(b), bottom: Some(b), right: Some(b), between: Some(b), inside_v: Some(b), ..Default::default() }
     }
     pub fn box_(b: Border) -> Borders {
-        Borders { top: Some(b), left: Some(b), bottom: Some(b), right: Some(b), between: None, inside_v: None }
+        Borders { top: Some(b), left: Some(b), bottom: Some(b), right: Some(b), between: None, inside_v: None, ..Default::default() }
     }
     pub fn any_visible(&self) -> bool {
-        [self.top, self.left, self.bottom, self.right, self.between, self.inside_v].iter().flatten().any(Border::is_visible)
+        [self.top, self.left, self.bottom, self.right, self.between, self.inside_v, self.tl2br, self.tr2bl].iter().flatten().any(Border::is_visible)
     }
     /// Apply every `Some` side of `patch` on top of `self`.
     pub fn overlay(&mut self, patch: &Borders) {
@@ -202,6 +206,12 @@ impl Borders {
         }
         if patch.inside_v.is_some() {
             self.inside_v = patch.inside_v;
+        }
+        if patch.tl2br.is_some() {
+            self.tl2br = patch.tl2br;
+        }
+        if patch.tr2bl.is_some() {
+            self.tr2bl = patch.tr2bl;
         }
     }
 }

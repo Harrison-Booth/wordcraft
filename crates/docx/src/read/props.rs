@@ -495,6 +495,8 @@ pub fn borders(e: &El) -> Borders {
             "right" | "end" => b.right = Some(border(k)),
             "between" | "insideH" => b.between = Some(border(k)),
             "insideV" => b.inside_v = Some(border(k)),
+            "tl2br" => b.tl2br = Some(border(k)),
+            "tr2bl" => b.tr2bl = Some(border(k)),
             _ => {}
         }
     }
