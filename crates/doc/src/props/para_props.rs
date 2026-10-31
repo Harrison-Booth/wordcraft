@@ -148,11 +148,15 @@ pub struct Border {
     pub color: Option<Rgb>,
     /// Distance from the text, points.
     pub space: f32,
+    /// Whether Word draws the border with a shadow. `None` preserves an omitted attribute.
+    pub shadow: Option<bool>,
+    /// Whether Word draws the border as a frame. `None` preserves an omitted attribute.
+    pub frame: Option<bool>,
 }
 
 impl Border {
     pub fn single(width: f32) -> Border {
-        Border { style: BorderStyle::Single, width, color: None, space: 0.0 }
+        Border { style: BorderStyle::Single, width, color: None, space: 0.0, shadow: None, frame: None }
     }
     pub fn is_visible(&self) -> bool {
         self.style != BorderStyle::None && self.width > 0.0
