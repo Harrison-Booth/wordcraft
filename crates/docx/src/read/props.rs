@@ -481,7 +481,8 @@ pub fn border(e: &El) -> Border {
     let width = e.attr("w:sz").and_then(|v| measure(v, 8.0)).unwrap_or(0.5).clamp(0.0, 12.0);
     let color = e.attr("w:color").and_then(Rgb::parse);
     let space = e.attr("w:space").and_then(|v| measure(v, 1.0)).unwrap_or(0.0).clamp(0.0, 31.0);
-    Border { style, width, color, space }
+    let attr_toggle = |name| e.attr(name).map(|v| !matches!(v.trim(), "0" | "false" | "off" | "False" | "FALSE"));
+    Border { style, width, color, space, shadow: attr_toggle("w:shadow"), frame: attr_toggle("w:frame") }
 }
 
 /// `w:pBdr`, `w:tblBorders`, `w:tcBorders`, `w:pgBorders`.
