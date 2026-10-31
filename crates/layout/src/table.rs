@@ -344,6 +344,8 @@ fn region_borders(parts: &[(TablePart, Borders)], (ri, nrows): (usize, usize), (
                 right: if last_g { b.right } else { b.inside_v },
                 between: None,
                 inside_v: None,
+                tl2br: b.tl2br,
+                tr2bl: b.tr2bl,
             }
         } else if part.is_column() {
             Borders {
@@ -353,6 +355,8 @@ fn region_borders(parts: &[(TablePart, Borders)], (ri, nrows): (usize, usize), (
                 right: b.right,
                 between: None,
                 inside_v: None,
+                tl2br: b.tl2br,
+                tr2bl: b.tr2bl,
             }
         } else {
             Borders { between: None, inside_v: None, ..b }
@@ -585,6 +589,8 @@ pub fn layout_table(ctx: &mut Ctx, story: StoryRef, t: &Table, path: &[u32], ava
                 ),
                 between: None,
                 inside_v: None,
+                tl2br: cb.tl2br.or(row_borders.tl2br).or(rb.tl2br),
+                tr2bl: cb.tr2bl.or(row_borders.tr2bl).or(rb.tr2bl),
             };
             // The logical start (left) and end (right) borders, drawn mirrored in an RTL table.
             if rtl {
