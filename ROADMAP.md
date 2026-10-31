@@ -669,6 +669,7 @@ Footer page-table height and body wrapping are corrected. Other pagination gaps 
 
 ## Revision history
 
+| 2026-10-30 | trivial | DOCX section settings preserve printer trays, endnote suppression, chapter numbering, and independent footnote columns through repeated saves; readiness estimates unchanged |
 > 2026-10-28 · Markdown import bounds reference-label scans and normalization within the existing link-work allowance. Nested undefined labels preserve literal text instead of causing quadratic work (#4658).
 >
 > 2026-10-23 · cu20we review follow-up: Only paragraph-relative box floats use the pre-spacing origin. Line-relative floats and page/margin fallbacks in cells and text boxes keep the text-top origin. Synthetic controls compare zero and 24 pt space-before across all four box contexts. New cap conversion helpers and regression tests document their contracts; readiness estimates unchanged.
