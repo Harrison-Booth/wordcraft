@@ -33,6 +33,8 @@ pub struct Style {
     pub next: Option<String>,
     /// Linked character/paragraph style id.
     pub linked: Option<String>,
+    /// Alternate names stored in `w:aliases`.
+    pub aliases: Vec<String>,
     pub para: ParaProps,
     pub chr: CharProps,
     /// Gallery order (lower first).

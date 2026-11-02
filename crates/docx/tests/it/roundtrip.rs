@@ -255,6 +255,7 @@ fn styles_and_lists_round_trip() {
         based_on: Some("Normal".into()),
         next: Some("Normal".into()),
         linked: Some("MyStyleChar".into()),
+        aliases: Vec::new(),
         para: ParaProps { space_after: Some(3.0), align: Some(Align::Center), ..Default::default() },
         chr: CharProps { italic: Some(true), color: Some(TextColor::Rgb(Rgb(1, 2, 3))), ..Default::default() },
         priority: Some(5),
