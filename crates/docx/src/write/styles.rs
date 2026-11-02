@@ -89,6 +89,7 @@ fn style_xml(w: &mut W, st: &Style, flagged: &[StyleKind]) {
     if let Some(b) = &st.linked {
         w.val("w:link", b);
     }
+    write_style_aliases(w, st);
     if let Some(p) = st.priority {
         w.val("w:uiPriority", &p.to_string());
     }
@@ -177,6 +178,13 @@ fn style_xml(w: &mut W, st: &Style, flagged: &[StyleKind]) {
         }
     }
     w.close("w:style");
+}
+
+fn write_style_aliases(w: &mut W, st: &Style) {
+    let aliases = st.aliases.iter().take(64).filter(|v| v.len() <= 255).cloned().collect::<Vec<_>>().join(",");
+    if !aliases.is_empty() {
+        w.val("w:aliases", &aliases);
+    }
 }
 
 pub(super) fn numbering_xml(doc: &Document) -> Vec<u8> {

@@ -77,6 +77,8 @@ Weights are the share of a Word user's file traffic (estimate). Read/write: ✅ 
 
 Measured by grepping `crates/docx/src/read` and `src/write` for the OOXML elements (2026-10-10).
 
+Defined DOCX styles retain alternate names (`w:aliases`) through native JSON and two save/reopen cycles. The regression checks escaped alias text, the unchanged primary style id/name, and unchanged body text.
+
 | Feature | Read | Write | Notes |
 |---|---|---|---|
 | Text, runs, paragraph and character properties, styles, numbering, sections | ✅ | ✅ | Including a Styles gallery for files that mark no style `w:qFormat` (LibreOffice: Word's usual quick styles are added, #1238), complex-script props (`w:rtl`, `w:cs`, `w:szCs`, `w:bCs`…); runs that mix right-to-left and left-to-right text are split on save where the direction changes, and the right-to-left pieces get `w:rtl` and a bidi language (`w:lang w:bidi`, e.g. he-IL), so Word lays Hebrew around Latin names, numbers and e-mail addresses out as WordCraft does and doesn't call it Arabic (#1543, checked in Word for Mac 16.113.4), East Asian fonts kept apart from Latin (#111); independent complex-script formatting inherited through defaults/styles and preserved over repeated saves (`complex_script_inheritance.rs`), indents in characters (`w:firstLineChars`, `w:hangingChars`, `w:leftChars`, `w:rightChars`, #534); every ST_NumberFormat value of `w:numFmt` is kept on save, Chinese/Japanese/Korean, enclosed and full-width formats and Arabic letters (`arabicAlpha`, `arabicAbjad`) are drawn, the rest (Hebrew, Hindi, Thai…) show decimal (#534). `w:beforeLines`/`w:afterLines` not kept (the points are). Word's built-in heading styles (`heading 1`…`heading 9`, by name, whatever their id) have their outline level when `styles.xml` leaves out `w:outlineLvl`, as in Word, so their paragraphs show in the Navigation pane and the table of contents (#4696). A paragraph naming a style `styles.xml` doesn't define (Pandoc's footers name `Footer` without defining it) is formatted as Normal, the default paragraph style, as in Word, not with the document defaults alone; it keeps the style it names on save (#5077, `crates/docx/tests/it/undefined_style.rs`) |
@@ -273,6 +275,8 @@ Custom document properties retain their bookmark link targets through DOCX saves
 Table rows and cells inside `mc:AlternateContent` use the same selected-branch policy as paragraphs and runs (#5219), rather than disappearing on open and save. Original synthetic fixtures cover Choice/Fallback selection, namespace aliases, mixed requirements, row/cell order and nested content controls through two DOCX saves. This fixes a focused preservation case; native Word and broader real-world corpus qualification remain open.
 
 ## Revision history
+
+> 2026-11-02 · DOCX style aliases now survive JSON and repeated save/reopen cycles; the original id and name remain unchanged.
 
 > 2026-10-28 · Charts and SmartArt: text the font lacks (Chinese axis labels and legends) is drawn in a fallback face instead of boxes, one face per run as in body text (#4720, `layout::tests::chart_text_the_font_lacks_is_drawn_in_a_fallback_face`).
 

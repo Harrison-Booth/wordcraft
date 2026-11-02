@@ -153,6 +153,31 @@ fn repeated_style_ids_use_last() {
 }
 
 #[test]
+fn style_aliases_survive_json_and_two_docx_saves() {
+    let styles = format!(
+        r#"<w:styles {W_NS}><w:style w:type="paragraph" w:customStyle="1" w:styleId="StyleProbe"><w:name w:val="Style Probe"/><w:aliases w:val="Alt &amp; One,Alt Two"/></w:style></w:styles>"#
+    );
+    let mut document = wordcraft_docx::read(&docx(
+        r#"<w:p><w:pPr><w:pStyle w:val="StyleProbe"/></w:pPr><w:r><w:t>Keep this text</w:t></w:r></w:p>"#,
+        &[("styles", "styles", "styles.xml")],
+        &[("word/styles.xml", &styles)],
+    ))
+    .unwrap();
+
+    for round in 0..=2 {
+        let style = document.styles.get("StyleProbe").unwrap();
+        assert_eq!(style.id, "StyleProbe");
+        assert_eq!(style.name, "Style Probe");
+        assert_eq!(style.aliases, ["Alt & One", "Alt Two"]);
+        assert_eq!(document.body.iter().filter_map(|b| b.as_para()).map(|p| p.plain_text()).collect::<Vec<_>>(), ["Keep this text"]);
+        if round < 2 {
+            document = serde_json::from_slice(&serde_json::to_vec(&document).unwrap()).unwrap();
+            document = wordcraft_docx::read(&wordcraft_docx::write(&document).unwrap()).unwrap();
+        }
+    }
+}
+
+#[test]
 fn paragraph_default_presence_survives_repeated_saves() {
     // Omission leaves paragraph defaults application-defined (ISO 29500 pPrDefault).
     // An explicitly empty container must therefore remain distinct from omission.

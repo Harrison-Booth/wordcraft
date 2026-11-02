@@ -119,6 +119,12 @@ impl Reader<'_> {
                 based_on: r("w:basedOn").filter(|b| *b != id),
                 next: r("w:next"),
                 linked: r("w:link"),
+                aliases: s
+                    .child_val("w:aliases")
+                    .map(|v| {
+                        v.split(',').take(64).map(str::trim).filter(|v| !v.is_empty()).take_while(|v| v.len() <= 255).map(str::to_owned).collect()
+                    })
+                    .unwrap_or_default(),
                 priority: s.child_val("w:uiPriority").and_then(u32_of),
                 quick: flag(s, "w:qFormat").unwrap_or(false),
                 hidden: flag(s, "w:semiHidden").unwrap_or(false) || flag(s, "w:hidden").unwrap_or(false),
