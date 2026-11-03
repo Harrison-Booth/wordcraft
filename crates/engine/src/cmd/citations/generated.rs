@@ -228,6 +228,8 @@ fn add_entry_style(s: &mut Session) {
             kind: wordcraft_doc::StyleKind::Paragraph,
             based_on: Some("Normal".into()),
             para: wordcraft_doc::ParaProps { space_after: Some(4.0), ..Default::default() },
+            semi_hidden: Some(true),
+            unhide_when_used: Some(true),
             hidden: true,
             ..Default::default()
         });

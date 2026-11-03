@@ -259,6 +259,9 @@ fn styles_and_lists_round_trip() {
         chr: CharProps { italic: Some(true), color: Some(TextColor::Rgb(Rgb(1, 2, 3))), ..Default::default() },
         priority: Some(5),
         quick: true,
+        permanently_hidden: None,
+        semi_hidden: None,
+        unhide_when_used: None,
         hidden: false,
         builtin: false,
         locked: true,
@@ -271,6 +274,8 @@ fn styles_and_lists_round_trip() {
         kind: StyleKind::Character,
         linked: Some("MyStyle".into()),
         chr: CharProps { italic: Some(true), ..Default::default() },
+        semi_hidden: Some(true),
+        unhide_when_used: Some(true),
         hidden: true,
         ..Default::default()
     });
