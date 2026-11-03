@@ -119,6 +119,7 @@ impl Reader<'_> {
                 based_on: r("w:basedOn").filter(|b| *b != id),
                 next: r("w:next"),
                 linked: r("w:link"),
+                auto_update: flag(s, "w:autoRedefine"),
                 priority: s.child_val("w:uiPriority").and_then(u32_of),
                 quick: flag(s, "w:qFormat").unwrap_or(false),
                 hidden: flag(s, "w:semiHidden").unwrap_or(false) || flag(s, "w:hidden").unwrap_or(false),

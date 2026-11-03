@@ -33,6 +33,8 @@ pub struct Style {
     pub next: Option<String>,
     /// Linked character/paragraph style id.
     pub linked: Option<String>,
+    /// Word's Automatically Update setting (`w:autoRedefine`).
+    pub auto_update: Option<bool>,
     pub para: ParaProps,
     pub chr: CharProps,
     /// Gallery order (lower first).

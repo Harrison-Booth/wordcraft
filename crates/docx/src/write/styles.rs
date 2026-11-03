@@ -89,6 +89,7 @@ fn style_xml(w: &mut W, st: &Style, flagged: &[StyleKind]) {
     if let Some(b) = &st.linked {
         w.val("w:link", b);
     }
+    write_style_auto_update(w, st);
     if let Some(p) = st.priority {
         w.val("w:uiPriority", &p.to_string());
     }
@@ -177,6 +178,12 @@ fn style_xml(w: &mut W, st: &Style, flagged: &[StyleKind]) {
         }
     }
     w.close("w:style");
+}
+
+fn write_style_auto_update(w: &mut W, st: &Style) {
+    if let Some(value) = st.auto_update {
+        w.val("w:autoRedefine", if value { "1" } else { "0" });
+    }
 }
 
 pub(super) fn numbering_xml(doc: &Document) -> Vec<u8> {
