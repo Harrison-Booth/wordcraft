@@ -112,6 +112,8 @@ impl Reader<'_> {
             };
             let name = s.child_val("w:name").map(ui_style_name).unwrap_or_else(|| id.clone());
             let r = |n: &str| s.child_val(n).filter(|v| !v.is_empty()).map(|v| self.pc.style_id(v));
+            let permanently_hidden = flag(s, "w:hidden");
+            let semi_hidden = flag(s, "w:semiHidden");
             let mut st = Style {
                 id: id.clone(),
                 name,
@@ -121,7 +123,10 @@ impl Reader<'_> {
                 linked: r("w:link"),
                 priority: s.child_val("w:uiPriority").and_then(u32_of),
                 quick: flag(s, "w:qFormat").unwrap_or(false),
-                hidden: flag(s, "w:semiHidden").unwrap_or(false) || flag(s, "w:hidden").unwrap_or(false),
+                permanently_hidden,
+                semi_hidden,
+                unhide_when_used: flag(s, "w:unhideWhenUsed"),
+                hidden: permanently_hidden.unwrap_or(false) || semi_hidden.unwrap_or(false),
                 builtin: !s.attr("w:customStyle").is_some_and(|v| matches!(v.trim(), "1" | "true" | "on")),
                 locked: flag(s, "w:locked").unwrap_or(false),
                 // Only where the writer couldn't tell from the id (it flags the English ids).

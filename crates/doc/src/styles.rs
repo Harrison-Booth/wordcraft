@@ -39,6 +39,13 @@ pub struct Style {
     pub priority: Option<u32>,
     /// Shown in the Styles gallery on the Home tab.
     pub quick: bool,
+    /// Permanent hidden state (`w:hidden`), kept distinct from gallery visibility.
+    pub permanently_hidden: Option<bool>,
+    /// Semi-hidden state (`w:semiHidden`).
+    pub semi_hidden: Option<bool>,
+    /// Whether use should reveal the style (`w:unhideWhenUsed`).
+    pub unhide_when_used: Option<bool>,
+    /// Effective gallery visibility, derived from the two hidden flags.
     pub hidden: bool,
     /// Built in (cannot be deleted).
     pub builtin: bool,
@@ -504,6 +511,8 @@ impl StyleSheet {
             name: "Default Paragraph Font".into(),
             kind: StyleKind::Character,
             priority: Some(1),
+            semi_hidden: Some(true),
+            unhide_when_used: Some(true),
             hidden: true,
             builtin: true,
             ..Default::default()
@@ -878,7 +887,16 @@ fn table_styles() -> Vec<Style> {
         ("Purple", Rgb(0x71, 0x2E, 0x8D), Rgb(0xE5, 0xD2, 0xEE)),
     ];
     let mut v = vec![
-        Style { id: "TableNormal".into(), name: "Normal Table".into(), kind: StyleKind::Table, hidden: true, builtin: true, ..Default::default() },
+        Style {
+            id: "TableNormal".into(),
+            name: "Normal Table".into(),
+            kind: StyleKind::Table,
+            semi_hidden: Some(true),
+            unhide_when_used: Some(true),
+            hidden: true,
+            builtin: true,
+            ..Default::default()
+        },
         mk(
             "PlainTable1",
             "Plain Table 1",

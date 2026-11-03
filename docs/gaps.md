@@ -101,6 +101,8 @@ full number from ~60% to ~75%. Everything else is depth on the way to full parit
 
 ## By kind
 
+Defined DOCX styles preserve permanent hidden, semi-hidden and unhide-on-use flags independently, including explicit false and omitted values, across repeated saves.
+
 List toggles now recognise numbering inherited from paragraph styles (related to #3459). This closes that command-level case; the broader issue and readiness estimates are unchanged. See [typing-parity.md](typing-parity.md) for the original-fixture and round-trip coverage.
 
 Sample-text formulas on Enter (#1067) are implemented: `=rand()` and `=lorem()`,
@@ -144,6 +146,8 @@ Recipient label generation (#4880) now includes all selected recipients across a
 Table rows and cells inside `mc:AlternateContent` use the same selected-branch policy as paragraphs and runs (#5219), rather than disappearing on open and save. Original synthetic fixtures cover Choice/Fallback selection, namespace aliases, mixed requirements, row/cell order and nested content controls through two DOCX saves. This fixes a focused preservation case; native Word and broader real-world corpus qualification remain open.
 
 ## Revision history
+
+| 2026-11-03 | trivial | Defined style hidden, semi-hidden and unhide-on-use flags are distinct and preserved through JSON and two DOCX saves; readiness estimates unchanged |
 
 > 2026-10-27 · Technical synchronization: existing Proofing pane hooks and regression tests follow the extracted engine/UI modules on main `436d444`; compact context menus remain upstream. New-SHA validation is pending; readiness unchanged.
 >

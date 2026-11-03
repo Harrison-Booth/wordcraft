@@ -92,9 +92,14 @@ fn style_xml(w: &mut W, st: &Style, flagged: &[StyleKind]) {
     if let Some(p) = st.priority {
         w.val("w:uiPriority", &p.to_string());
     }
-    if st.hidden {
+    if st.permanently_hidden.is_none() && st.semi_hidden.is_none() && st.unhide_when_used.is_none() && st.hidden {
+        // Preserve the legacy model behaviour for built-in styles created in memory.
         w.empty("w:semiHidden", &[]);
         w.empty("w:unhideWhenUsed", &[]);
+    } else {
+        style_flag(w, "w:hidden", st.permanently_hidden);
+        style_flag(w, "w:semiHidden", st.semi_hidden);
+        style_flag(w, "w:unhideWhenUsed", st.unhide_when_used);
     }
     if st.quick {
         w.empty("w:qFormat", &[]);
@@ -177,6 +182,14 @@ fn style_xml(w: &mut W, st: &Style, flagged: &[StyleKind]) {
         }
     }
     w.close("w:style");
+}
+
+fn style_flag(w: &mut W, name: &str, value: Option<bool>) {
+    match value {
+        Some(true) => w.empty(name, &[]),
+        Some(false) => w.val(name, "0"),
+        None => {}
+    }
 }
 
 pub(super) fn numbering_xml(doc: &Document) -> Vec<u8> {

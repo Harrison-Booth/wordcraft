@@ -75,6 +75,8 @@ Weights are the share of a Word user's file traffic (estimate). Read/write: ✅ 
 
 ## DOCX in depth
 
+Defined styles preserve the independent `w:hidden`, `w:semiHidden` and `w:unhideWhenUsed` values, including explicit false and omission, through native JSON and two DOCX save/reopen cycles.
+
 Measured by grepping `crates/docx/src/read` and `src/write` for the OOXML elements (2026-10-10).
 
 | Feature | Read | Write | Notes |
@@ -285,6 +287,8 @@ Custom document properties retain their bookmark link targets through DOCX saves
 Table rows and cells inside `mc:AlternateContent` use the same selected-branch policy as paragraphs and runs (#5219), rather than disappearing on open and save. Original synthetic fixtures cover Choice/Fallback selection, namespace aliases, mixed requirements, row/cell order and nested content controls through two DOCX saves. This fixes a focused preservation case; native Word and broader real-world corpus qualification remain open.
 
 ## Revision history
+
+> 2026-11-03 · Defined style visibility flags remain distinct through JSON and repeated DOCX saves, preserving permanent hidden state and explicit unhide-on-use off.
 
 > 2026-10-28 · Charts and SmartArt: text the font lacks (Chinese axis labels and legends) is drawn in a fallback face instead of boxes, one face per run as in body text (#4720, `layout::tests::chart_text_the_font_lacks_is_drawn_in_a_fallback_face`).
 

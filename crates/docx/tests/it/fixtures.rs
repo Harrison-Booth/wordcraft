@@ -153,6 +153,45 @@ fn repeated_style_ids_use_last() {
 }
 
 #[test]
+fn style_visibility_flags_survive_json_and_two_docx_saves() {
+    let styles = format!(
+        r#"<w:styles {W_NS}><w:style w:type="paragraph" w:customStyle="1" w:styleId="Permanent"><w:name w:val="Permanent"/><w:hidden w:val="1"/><w:semiHidden w:val="0"/><w:unhideWhenUsed w:val="0"/></w:style><w:style w:type="paragraph" w:customStyle="1" w:styleId="Semi"><w:name w:val="Semi"/><w:semiHidden w:val="1"/></w:style><w:style w:type="paragraph" w:customStyle="1" w:styleId="Visible"><w:name w:val="Visible"/></w:style></w:styles>"#
+    );
+    let mut document = wordcraft_docx::read(&docx(
+        r#"<w:p><w:pPr><w:pStyle w:val="Permanent"/></w:pPr><w:r><w:t>Keep this text</w:t></w:r></w:p>"#,
+        &[("styles", "styles", "styles.xml")],
+        &[("word/styles.xml", &styles)],
+    ))
+    .unwrap();
+
+    for round in 0..=2 {
+        let permanent = document.styles.get("Permanent").unwrap();
+        assert_eq!(permanent.permanently_hidden, Some(true));
+        assert_eq!(permanent.semi_hidden, Some(false));
+        assert_eq!(permanent.unhide_when_used, Some(false));
+        assert!(permanent.hidden);
+
+        let semi = document.styles.get("Semi").unwrap();
+        assert_eq!(semi.permanently_hidden, None);
+        assert_eq!(semi.semi_hidden, Some(true));
+        assert_eq!(semi.unhide_when_used, None);
+        assert!(semi.hidden);
+
+        let visible = document.styles.get("Visible").unwrap();
+        assert_eq!(visible.permanently_hidden, None);
+        assert_eq!(visible.semi_hidden, None);
+        assert_eq!(visible.unhide_when_used, None);
+        assert!(!visible.hidden);
+        assert_eq!(paras(&document).iter().map(|p| p.text.as_str()).collect::<Vec<_>>(), ["Keep this text"]);
+
+        if round < 2 {
+            document = serde_json::from_slice(&serde_json::to_vec(&document).unwrap()).unwrap();
+            document = wordcraft_docx::read(&wordcraft_docx::write(&document).unwrap()).unwrap();
+        }
+    }
+}
+
+#[test]
 fn paragraph_default_presence_survives_repeated_saves() {
     // Omission leaves paragraph defaults application-defined (ISO 29500 pPrDefault).
     // An explicitly empty container must therefore remain distinct from omission.
