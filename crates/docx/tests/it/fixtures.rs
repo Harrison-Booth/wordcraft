@@ -153,6 +153,30 @@ fn repeated_style_ids_use_last() {
 }
 
 #[test]
+fn style_auto_update_survives_json_and_two_docx_saves() {
+    let styles = format!(
+        r#"<w:styles {W_NS}><w:style w:type="paragraph" w:customStyle="1" w:styleId="AutoOn"><w:name w:val="Auto On"/><w:autoRedefine w:val="1"/></w:style><w:style w:type="paragraph" w:customStyle="1" w:styleId="AutoOff"><w:name w:val="Auto Off"/><w:autoRedefine w:val="0"/></w:style><w:style w:type="paragraph" w:customStyle="1" w:styleId="AutoUnset"><w:name w:val="Auto Unset"/></w:style></w:styles>"#
+    );
+    let mut document = wordcraft_docx::read(&docx(
+        r#"<w:p><w:pPr><w:pStyle w:val="AutoOn"/></w:pPr><w:r><w:t>Keep this text</w:t></w:r></w:p>"#,
+        &[("styles", "styles", "styles.xml")],
+        &[("word/styles.xml", &styles)],
+    ))
+    .unwrap();
+
+    for round in 0..=2 {
+        assert_eq!(document.styles.get("AutoOn").unwrap().auto_update, Some(true));
+        assert_eq!(document.styles.get("AutoOff").unwrap().auto_update, Some(false));
+        assert_eq!(document.styles.get("AutoUnset").unwrap().auto_update, None);
+        assert_eq!(document.body.iter().filter_map(|b| b.as_para()).map(|p| p.plain_text()).collect::<Vec<_>>(), ["Keep this text"]);
+        if round < 2 {
+            document = serde_json::from_slice(&serde_json::to_vec(&document).unwrap()).unwrap();
+            document = wordcraft_docx::read(&wordcraft_docx::write(&document).unwrap()).unwrap();
+        }
+    }
+}
+
+#[test]
 fn paragraph_default_presence_survives_repeated_saves() {
     // Omission leaves paragraph defaults application-defined (ISO 29500 pPrDefault).
     // An explicitly empty container must therefore remain distinct from omission.
