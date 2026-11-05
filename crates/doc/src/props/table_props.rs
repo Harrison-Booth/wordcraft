@@ -1,4 +1,5 @@
 use super::char_props::PropChange;
+use super::cnf_style::CnfStyle;
 use super::color::Rgb;
 use super::para_props::{Align, Borders};
 use super::{Deserialize, Serialize};
@@ -158,6 +159,12 @@ pub struct TableProps {
     /// the right margin.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub bidi_visual: bool,
+    /// Space above and below a table in the text flow, points (ODF's table `fo:margin-top` and
+    /// `fo:margin-bottom`; Word has none). Added to the spacing of the paragraphs around it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub space_before: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub space_after: Option<f32>,
 }
 
 /// Where a floating table sits; the text after it wraps around it.
@@ -216,6 +223,9 @@ pub enum HeightRule {
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct RowProps {
+    /// Explicit conditional table-style flags (`w:cnfStyle`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cnf_style: Option<Box<CnfStyle>>,
     /// Points (meaning depends on `height_rule`).
     pub height: Option<f32>,
     pub height_rule: HeightRule,
@@ -262,6 +272,9 @@ pub enum VMerge {
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct CellProps {
+    /// Explicit conditional table-style flags (`w:cnfStyle`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cnf_style: Option<Box<CnfStyle>>,
     /// Preferred width, points.
     pub width: Option<f32>,
     /// Preferred width as a percentage of the table's (`w:tcW w:type="pct"`).
@@ -294,6 +307,38 @@ pub struct CellProps {
     /// Tracked formatting change (`w:tcPrChange`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fmt_change: Option<Box<PropChange<CellProps>>>,
+    /// A picture behind the cell's content (an ODF cell's `style:background-image`; Word has
+    /// none).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub picture: Option<Box<CellPicture>>,
+}
+
+/// A cell's background picture: drawn at its own size where `align` puts it, tiled, or stretched
+/// over the cell, and cut off at the cell's edges.
+#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct CellPicture {
+    /// Key into [`crate::Document::media`].
+    pub media: String,
+    /// Its own size, points.
+    pub size: [f32; 2],
+    pub repeat: PictureRepeat,
+    /// Where an unrepeated picture sits: 0 the left (top) edge, 0.5 the middle, 1 the right
+    /// (bottom) edge.
+    pub align: [f32; 2],
+}
+
+/// How a background picture fills its area (ODF §20.348 `style:repeat`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PictureRepeat {
+    /// Once, at its own size.
+    #[default]
+    None,
+    /// Repeated across the area.
+    Tile,
+    /// Stretched over the area.
+    Stretch,
 }
 
 impl CellProps {
