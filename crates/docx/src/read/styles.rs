@@ -2,6 +2,7 @@ use super::{
     AbstractNum, DocxError, El, Level, LevelSuffix, Num, NumFormat, PartFormat, Reader, Style, StyleKind, StyleSheet, TablePart, TableStyleParts,
     VAlign, flag, int, props, tw, u32_of,
 };
+use std::sync::Arc;
 
 /// Built-in style names Word stores in lower case, and how the UI shows them.
 pub(crate) const LOWER_NAMES: &[(&str, &str)] = &[
@@ -186,7 +187,7 @@ impl Reader<'_> {
         if !sheet.styles.iter().any(|s| s.quick) {
             sheet.add_default_gallery();
         }
-        self.doc.styles = sheet;
+        self.doc.styles = Arc::new(sheet);
         Ok(())
     }
 
@@ -196,7 +197,7 @@ impl Reader<'_> {
         let mut t = TableStyleParts::default();
         if let Some(tp) = s.child("w:tblPr") {
             if let Some(b) = tp.child("w:tblBorders") {
-                t.borders = Some(props::borders(b));
+                t.borders = Some(self.pc.borders(b));
             }
             t.fill = tp.child("w:shd").and_then(|e| self.pc.shd_fill(e));
             t.cell_margins = tp.child("w:tblCellMar").map(props::margins);
@@ -210,13 +211,14 @@ impl Reader<'_> {
             let f = PartFormat {
                 chr: c.child("w:rPr").map(|r| self.pc.rpr(r)).unwrap_or_default(),
                 fill: tc.and_then(|p| p.child("w:shd")).and_then(|e| self.pc.shd_fill(e)),
-                borders: tc.and_then(|p| p.child("w:tcBorders")).map(props::borders),
+                borders: tc.and_then(|p| p.child("w:tcBorders")).map(|b| self.pc.borders(b)),
                 align: ppr.as_ref().and_then(|p| p.align),
                 v_align: tc.and_then(|p| p.child_val("w:vAlign")).map(|v| match v {
                     "center" => VAlign::Center,
                     "bottom" => VAlign::Bottom,
                     _ => VAlign::Top,
                 }),
+                fit_text: tc.and_then(|p| props::tcpr(&self.pc, p).0.fit_text),
             };
             if part == TablePart::WholeTable {
                 // The whole table's paragraph and run properties are the style's own; its
@@ -229,10 +231,10 @@ impl Reader<'_> {
                     t.fill = f.fill;
                 }
                 if let Some(b) = c.child("w:tblPr").and_then(|p| p.child("w:tblBorders")) {
-                    t.borders = Some(props::borders(b));
+                    t.borders = Some(self.pc.borders(b));
                 }
-                if f.v_align.is_some() {
-                    t.regions.insert(part, PartFormat { v_align: f.v_align, ..PartFormat::default() });
+                if f.v_align.is_some() || f.fit_text.is_some() {
+                    t.regions.insert(part, PartFormat { v_align: f.v_align, fit_text: f.fit_text, ..PartFormat::default() });
                 }
             } else {
                 t.set_part(part, f);
@@ -298,8 +300,8 @@ impl Reader<'_> {
                 a.levels = levels;
             }
         }
-        self.doc.numbering.abstracts = abstracts;
-        self.doc.numbering.nums = nums;
+        Arc::make_mut(&mut self.doc.numbering).abstracts = abstracts;
+        Arc::make_mut(&mut self.doc.numbering).nums = nums;
         Ok(())
     }
 

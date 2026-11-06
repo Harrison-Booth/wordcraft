@@ -25,6 +25,47 @@ pub enum TextDirection {
     Up,
 }
 
+/// Width and measurement type of table cell spacing (`w:tblCellSpacing`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CellSpacing {
+    /// The OOXML width value (twips for `dxa`, fiftieths of a percent for `pct`).
+    pub width: u32,
+    /// The OOXML width measurement.
+    pub kind: CellSpacingKind,
+}
+
+/// Supported `w:tblCellSpacing/@w:type` values.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum CellSpacingKind {
+    Dxa,
+    Pct,
+    Auto,
+    Nil,
+}
+
+impl CellSpacingKind {
+    pub fn from_ooxml(value: &str) -> Option<Self> {
+        match value {
+            "dxa" => Some(Self::Dxa),
+            "pct" => Some(Self::Pct),
+            "auto" => Some(Self::Auto),
+            "nil" => Some(Self::Nil),
+            _ => None,
+        }
+    }
+
+    pub fn ooxml(self) -> &'static str {
+        match self {
+            Self::Dxa => "dxa",
+            Self::Pct => "pct",
+            Self::Auto => "auto",
+            Self::Nil => "nil",
+        }
+    }
+}
+
 impl TextDirection {
     /// The direction an OOXML `ST_TextDirection` value names (transitional and strict names).
     /// The East Asian vertical layouts turn like `Down`; unknown values are horizontal.
@@ -136,6 +177,9 @@ pub struct TableProps {
     pub borders: Option<Borders>,
     /// Default cell margins (top, left, bottom, right), points.
     pub cell_margins: Option<[f32; 4]>,
+    /// Spacing between table cells (`w:tblCellSpacing`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cell_spacing: Option<CellSpacing>,
     /// Fixed column widths (no auto-fit).
     pub fixed: bool,
     /// Table style options ("look"): header row, total row, banded rows, first column, last
@@ -158,6 +202,12 @@ pub struct TableProps {
     /// the right margin.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub bidi_visual: bool,
+    /// Space above and below a table in the text flow, points (ODF's table `fo:margin-top` and
+    /// `fo:margin-bottom`; Word has none). Added to the spacing of the paragraphs around it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub space_before: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub space_after: Option<f32>,
 }
 
 /// Where a floating table sits; the text after it wraps around it.
@@ -287,6 +337,9 @@ pub struct CellProps {
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub text_direction_set: bool,
     pub no_wrap: bool,
+    /// Fit text in the cell by condensing it (`w:tcFitText`); unset inherits.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fit_text: Option<bool>,
     /// The cell's last paragraph takes no room when it is empty (`w:hideMark`): a row of such
     /// empty cells shrinks to its borders.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
@@ -294,6 +347,38 @@ pub struct CellProps {
     /// Tracked formatting change (`w:tcPrChange`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fmt_change: Option<Box<PropChange<CellProps>>>,
+    /// A picture behind the cell's content (an ODF cell's `style:background-image`; Word has
+    /// none).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub picture: Option<Box<CellPicture>>,
+}
+
+/// A cell's background picture: drawn at its own size where `align` puts it, tiled, or stretched
+/// over the cell, and cut off at the cell's edges.
+#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct CellPicture {
+    /// Key into [`crate::Document::media`].
+    pub media: String,
+    /// Its own size, points.
+    pub size: [f32; 2],
+    pub repeat: PictureRepeat,
+    /// Where an unrepeated picture sits: 0 the left (top) edge, 0.5 the middle, 1 the right
+    /// (bottom) edge.
+    pub align: [f32; 2],
+}
+
+/// How a background picture fills its area (ODF §20.348 `style:repeat`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PictureRepeat {
+    /// Once, at its own size.
+    #[default]
+    None,
+    /// Repeated across the area.
+    Tile,
+    /// Stretched over the area.
+    Stretch,
 }
 
 impl CellProps {

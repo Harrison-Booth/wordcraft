@@ -232,6 +232,40 @@ impl PartSet {
     }
 }
 
+/// A cell's borders from the table style's parts it is in, later parts winning. Row parts give
+/// their left/right edges at the table's sides and `inside_v` between cells; column parts their
+/// top/bottom edges at the table's top and bottom and `between` between rows; corner cells their
+/// four edges.
+pub fn part_borders(parts: &[(TablePart, Borders)], (ri, nrows): (usize, usize), (first_g, last_g): (bool, bool)) -> Borders {
+    let mut out = Borders::default();
+    for (part, b) in parts {
+        let b = *b;
+        let mapped = if part.is_row() {
+            Borders {
+                top: b.top,
+                bottom: b.bottom,
+                left: if first_g { b.left } else { b.inside_v },
+                right: if last_g { b.right } else { b.inside_v },
+                between: None,
+                inside_v: None,
+            }
+        } else if part.is_column() {
+            Borders {
+                top: if ri == 0 { b.top } else { b.between },
+                bottom: if ri + 1 >= nrows { b.bottom } else { b.between },
+                left: b.left,
+                right: b.right,
+                between: None,
+                inside_v: None,
+            }
+        } else {
+            Borders { between: None, inside_v: None, ..b }
+        };
+        out.overlay(&mapped);
+    }
+    out
+}
+
 /// What one table style part gives its cells.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
 #[serde(default, rename_all = "camelCase")]
@@ -245,6 +279,8 @@ pub struct PartFormat {
     pub align: Option<Align>,
     /// Vertical alignment in the cells (`w:tcPr/w:vAlign`).
     pub v_align: Option<VAlign>,
+    /// Cell-level Fit Text (`w:tcFitText`); unset inherits.
+    pub fit_text: Option<bool>,
 }
 
 impl PartFormat {
@@ -264,6 +300,7 @@ impl PartFormat {
         };
         self.align = patch.align.or(self.align);
         self.v_align = patch.v_align.or(self.v_align);
+        self.fit_text = patch.fit_text.or(self.fit_text);
     }
 }
 
@@ -317,11 +354,17 @@ impl TableStyleParts {
             borders,
             align: extra.align,
             v_align: extra.v_align,
+            fit_text: extra.fit_text,
         };
         match p {
-            TablePart::WholeTable => {
-                PartFormat { chr: CharProps::default(), fill: self.fill, borders: self.borders, align: None, v_align: extra.v_align }
-            }
+            TablePart::WholeTable => PartFormat {
+                chr: CharProps::default(),
+                fill: self.fill,
+                borders: self.borders,
+                align: None,
+                v_align: extra.v_align,
+                fit_text: extra.fit_text,
+            },
             TablePart::FirstRow => named(&self.header_chr, self.header_fill, self.header_borders),
             TablePart::LastRow => {
                 // The built-in top rule is the region's top edge unless its borders set one.
@@ -345,13 +388,13 @@ impl TableStyleParts {
     /// Replace part `p`'s formatting (for the whole table only its fill, borders and vertical
     /// alignment: [`Style::set_table_part`] stores the rest).
     pub fn set_part(&mut self, p: TablePart, f: PartFormat) {
-        let align_only = PartFormat { align: f.align, v_align: f.v_align, ..PartFormat::default() };
+        let align_only = PartFormat { align: f.align, v_align: f.v_align, fit_text: f.fit_text, ..PartFormat::default() };
         let PartFormat { chr, fill, borders, .. } = f.clone();
         let rest = match p {
             TablePart::WholeTable => {
                 self.fill = fill;
                 self.borders = borders;
-                PartFormat { v_align: f.v_align, ..PartFormat::default() }
+                PartFormat { v_align: f.v_align, fit_text: f.fit_text, ..PartFormat::default() }
             }
             TablePart::FirstRow => {
                 (self.header_chr, self.header_fill, self.header_borders) = (chr, fill, borders);
@@ -932,6 +975,31 @@ fn table_styles() -> Vec<Style> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::resolve::ResolvedPara;
+
+    #[test]
+    fn adjust_right_indent_inherits_and_can_be_overridden() {
+        let resolved = StyleSheet::empty().resolve_para(&ParaProps::default());
+        assert!(resolved.adjust_right_indent);
+
+        let mut older_json = serde_json::to_value(&resolved).unwrap();
+        older_json.as_object_mut().unwrap().remove("adjustRightIndent");
+        assert!(serde_json::from_value::<ResolvedPara>(older_json).unwrap().adjust_right_indent);
+
+        let mut s = StyleSheet::empty();
+        s.styles.push(Style {
+            id: "Normal".into(),
+            name: "Normal".into(),
+            para: ParaProps { adjust_right_indent: Some(true), ..Default::default() },
+            ..Default::default()
+        });
+        assert!(s.resolve_para(&ParaProps::default()).adjust_right_indent);
+        assert!(!s.resolve_para(&ParaProps { adjust_right_indent: Some(false), ..Default::default() }).adjust_right_indent);
+
+        let json = serde_json::to_value(ParaProps { adjust_right_indent: Some(false), ..Default::default() }).unwrap();
+        assert_eq!(json["adjustRightIndent"], false);
+        assert_eq!(serde_json::from_value::<ParaProps>(json).unwrap().adjust_right_indent, Some(false));
+    }
 
     #[test]
     fn builtins_present() {

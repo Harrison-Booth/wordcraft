@@ -1,8 +1,8 @@
 //! Property writers, in ECMA-376 schema element order.
 
 use wordcraft_doc::props::{
-    Align, Border, BorderStyle, Borders, CellProps, CharProps, EastAsianLayout, HeightRule, Highlight, LineSpacing, ParaProps, RowProps, TabAlign,
-    TabLeader, TableFloat, TableLook, TableProps, TextColor, VAlign, VMerge, VertAlign,
+    Align, Border, BorderStyle, Borders, CellProps, CellSpacing, CharProps, EastAsianLayout, HeightRule, Highlight, LineSpacing, ParaProps, RowProps,
+    TabAlign, TabLeader, TableFloat, TableLook, TableProps, TextColor, VAlign, VMerge, VertAlign,
 };
 
 use crate::units::{n, twips};
@@ -19,6 +19,17 @@ fn toggle(w: &mut W, name: &str, v: Option<bool>) {
 fn round(v: f32) -> i64 {
     let v = wordcraft_geom::finite(v);
     v.round().clamp(-1e9, 1e9) as i64
+}
+
+/// Writes a bounded `w:tblCellSpacing` width while preserving its measurement type.
+fn cell_spacing(w: &mut W, spacing: CellSpacing) {
+    let max = match spacing.kind {
+        wordcraft_doc::props::CellSpacingKind::Pct => 50_000,
+        wordcraft_doc::props::CellSpacingKind::Dxa | wordcraft_doc::props::CellSpacingKind::Auto | wordcraft_doc::props::CellSpacingKind::Nil => {
+            31_680
+        }
+    };
+    w.empty("w:tblCellSpacing", &[("w:w", &spacing.width.min(max).to_string()), ("w:type", spacing.kind.ooxml())]);
 }
 
 /// `w:rPr` content (without the wrapper). Link and revision marks are not run properties.
@@ -108,6 +119,10 @@ pub fn rpr_inner(w: &mut W, c: &CharProps) {
     }
     toggle(w, "w:rtl", c.rtl);
     toggle(w, "w:cs", c.cs);
+    // Emphasis mark (§17.3.2.12), after `w:cs` and before `w:lang`.
+    if let Some(m) = c.emphasis {
+        w.val("w:em", m.ooxml());
+    }
     let mut lang_attrs: Vec<(&str, &str)> = Vec::with_capacity(3);
     if let Some(l) = &c.lang {
         lang_attrs.push(("w:val", l));
@@ -280,8 +295,12 @@ pub fn ppr_inner(w: &mut W, p: &ParaProps, framed: bool, num_change: Option<&Cha
     write_indentation(w, p);
     toggle(w, "w:contextualSpacing", p.contextual_spacing);
     toggle(w, "w:mirrorIndents", p.mirror_indents);
+    toggle(w, "w:suppressOverlap", p.suppress_overlap);
     if let Some(a) = p.align {
         w.val("w:jc", align_val(a));
+    }
+    if let Some(t) = p.text_alignment {
+        w.val("w:textAlignment", t.ooxml());
     }
     if let Some(l) = p.outline_level {
         w.val("w:outlineLvl", &n(l.min(9) as i64));
@@ -319,6 +338,9 @@ fn write_frame(w: &mut W, p: &ParaProps, framed: bool) {
             a.push(("w:vSpace", &vs));
         }
         a.push(("w:wrap", &f.wrap));
+        if let Some(anchor_lock) = f.anchor_lock {
+            a.push(("w:anchorLock", if anchor_lock { "1" } else { "0" }));
+        }
         a.push(("w:vAnchor", &f.v_anchor));
         a.push(("w:hAnchor", &f.h_anchor));
         match &f.x_align {
@@ -366,6 +388,7 @@ fn write_text_flow(w: &mut W, p: &ParaProps) {
     toggle(w, "w:autoSpaceDE", p.auto_space_de);
     toggle(w, "w:autoSpaceDN", p.auto_space_dn);
     toggle(w, "w:bidi", p.bidi);
+    toggle(w, "w:adjustRightInd", p.adjust_right_indent);
     toggle(w, "w:snapToGrid", p.snap_to_grid);
 }
 
@@ -512,6 +535,9 @@ fn tblpr_inner(w: &mut W, t: &TableProps) {
     if let Some(a) = t.align {
         w.val("w:jc", align_val(if a == Align::Justify || a == Align::Distribute { Align::Left } else { a }));
     }
+    if let Some(v) = t.cell_spacing {
+        cell_spacing(w, v);
+    }
     if let Some(i) = t.indent {
         w.empty("w:tblInd", &[("w:w", &twips(i)), ("w:type", "dxa")]);
     }
@@ -566,6 +592,9 @@ fn tblprex(w: &mut W, t: &TableProps) {
     }
     if let Some(a) = t.align {
         w.val("w:jc", align_val(if a == Align::Justify || a == Align::Distribute { Align::Left } else { a }));
+    }
+    if let Some(v) = t.cell_spacing {
+        cell_spacing(w, v);
     }
     if let Some(i) = t.indent {
         w.empty("w:tblInd", &[("w:w", &twips(i)), ("w:type", "dxa")]);
@@ -655,6 +684,7 @@ fn tcpr_inner(w: &mut W, c: &CellProps) {
     if c.text_direction.is_turned() || c.text_direction_set {
         w.val("w:textDirection", c.text_direction.ooxml());
     }
+    toggle(w, "w:tcFitText", c.fit_text);
     match c.valign {
         None => {}
         Some(VAlign::Top) => w.val("w:vAlign", "top"),
