@@ -196,7 +196,7 @@ pub fn tabs(app: &mut WordApp, ui: &mut Ui, f: &mut TabsForm) -> bool {
     let u = unit();
     let k = u.pt_per_unit();
     ui.horizontal(|ui| {
-        ui.vertical(|ui| {
+        crate::rtl::vertical(ui, |ui| {
             ui.horizontal(|ui| {
                 if ui.button(tl!("New")).clicked() {
                     f.new_stop();
@@ -283,7 +283,7 @@ pub fn tabs(app: &mut WordApp, ui: &mut Ui, f: &mut TabsForm) -> bool {
                                         f.set_leader(i, l);
                                         pick = Some(i);
                                     }
-                                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                    ui.with_layout(crate::rtl::far_side(ui, egui::Align::Center), |ui| {
                                         ui.add_space(10.0); // clear of the scrollbar
                                         if ui.add(egui::Button::new("×").small().frame(false)).on_hover_text(tl!("Clear")).clicked() {
                                             remove = Some(i);
@@ -320,7 +320,7 @@ pub fn tabs(app: &mut WordApp, ui: &mut Ui, f: &mut TabsForm) -> bool {
             }
         });
         ui.add_space(12.0);
-        ui.vertical(|ui| {
+        crate::rtl::vertical(ui, |ui| {
             ui.set_min_width(130.0);
             let default_label = ui.label(tl!("Default tab stops:"));
             ui.add(egui::DragValue::new(&mut f.default_tab).speed(0.05).range(1.0 / k..=1584.0 / k).measure(u).max_decimals(2))
@@ -370,6 +370,11 @@ pub struct LineForm {
     pub width: f32,
     /// Top, bottom, left, right, between.
     pub sides: [bool; 5],
+    /// Flags belong to each original side and must survive editing unrelated border settings.
+    #[serde(skip)]
+    shadow: [Option<bool>; 5],
+    #[serde(skip)]
+    frame: [Option<bool>; 5],
 }
 
 const TOP: usize = 0;
@@ -395,6 +400,8 @@ impl LineForm {
     fn read(b: Option<&Borders>) -> LineForm {
         let side = |x: Option<Border>| x.filter(Border::is_visible);
         let s = b.map(|b| [side(b.top), side(b.bottom), side(b.left), side(b.right), side(b.between)]).unwrap_or_default();
+        let shadow = b.map(|b| [b.top, b.bottom, b.left, b.right, b.between].map(|x| x.and_then(|x| x.shadow))).unwrap_or_default();
+        let frame = b.map(|b| [b.top, b.bottom, b.left, b.right, b.between].map(|x| x.and_then(|x| x.frame))).unwrap_or_default();
         let on = s.map(|x| x.is_some());
         let first = s.iter().flatten().next().copied();
         let w = |i: usize| s.get(i).copied().flatten().map(|x| x.width).unwrap_or(0.0);
@@ -422,6 +429,8 @@ impl LineForm {
             color: first.and_then(|f| f.color).map(Rgb::hex).unwrap_or_default(),
             width: if width > 0.0 { width } else { 0.5 },
             sides: on,
+            shadow,
+            frame,
         }
     }
 
@@ -454,7 +463,14 @@ impl LineForm {
     }
 
     fn border(&self, side: usize) -> Border {
-        Border { style: self.style, width: self.side_width(side), color: Rgb::parse(&self.color), space: 0.0 }
+        Border {
+            style: self.style,
+            width: self.side_width(side),
+            color: Rgb::parse(&self.color),
+            space: 0.0,
+            shadow: self.shadow.get(side).copied().flatten(),
+            frame: self.frame.get(side).copied().flatten(),
+        }
     }
 
     /// The `sides` parameter of `para.borders` / `design.pageBorders`.
@@ -465,6 +481,12 @@ impl LineForm {
                 let mut side = json!({"style": self.style.ooxml(), "width": self.side_width(i)});
                 if Rgb::parse(&self.color).is_some() {
                     side["color"] = json!(self.color);
+                }
+                if let Some(shadow) = self.shadow.get(i).copied().flatten() {
+                    side["shadow"] = json!(shadow);
+                }
+                if let Some(frame) = self.frame.get(i).copied().flatten() {
+                    side["frame"] = json!(frame);
                 }
                 m.insert(k.into(), side);
             }
@@ -521,9 +543,9 @@ impl BordersForm {
                 let first = [TOP, LEFT, BOTTOM, RIGHT].into_iter().find(|i| self.para.sides.get(*i).copied().unwrap_or(false));
                 let border = match first {
                     Some(i) => self.para.border(i),
-                    None => Border { style: BorderStyle::None, width: 0.0, color: None, space: 0.0 },
+                    None => Border { style: BorderStyle::None, width: 0.0, color: None, space: 0.0, ..Default::default() },
                 };
-                out.push(("format.set", json!({"props": {"border": border}})));
+                out.push(("format.set", json!({"props": {"border": border}, "preserveBorderFlags": true})));
             } else {
                 out.push(("para.borders", json!({"sides": self.para.sides_param()})));
             }
@@ -617,8 +639,8 @@ impl From<bool> for Target {
 /// Setting, style, colour and width on the left; the preview with its side toggles on the right.
 fn lines(ui: &mut Ui, id: &str, l: &mut LineForm, theme: &[Rgb], fill: Option<Rgb>, target: Target) {
     let between = target == Target::Paragraph;
-    ui.horizontal_top(|ui| {
-        ui.vertical(|ui| {
+    crate::rtl::horizontal_top(ui, |ui| {
+        crate::rtl::vertical(ui, |ui| {
             ui.label(egui::RichText::new(tl!("Setting:")).font(semibold(12.5)));
             for (s, label) in
                 [(Setting::None, "None"), (Setting::Box, "Box"), (Setting::Shadow, "Shadow"), (Setting::ThreeD, "3-D"), (Setting::Custom, "Custom")]
@@ -629,7 +651,7 @@ fn lines(ui: &mut Ui, id: &str, l: &mut LineForm, theme: &[Rgb], fill: Option<Rg
             }
         });
         ui.add_space(8.0);
-        ui.vertical(|ui| {
+        crate::rtl::vertical(ui, |ui| {
             ui.label(tl!("Style:"));
             let current = STYLES.iter().find(|(s, _)| *s == l.style).map(|(_, n)| *n).unwrap_or("Single");
             craft_ui::ComboBox::from_id_salt((id, "style")).selected_text(tl!(current)).width(120.0).show_ui(ui, |ui| {
@@ -650,7 +672,7 @@ fn lines(ui: &mut Ui, id: &str, l: &mut LineForm, theme: &[Rgb], fill: Option<Rg
                 });
         });
         ui.add_space(8.0);
-        ui.vertical(|ui| {
+        crate::rtl::vertical(ui, |ui| {
             ui.label(egui::RichText::new(tl!("Preview")).font(semibold(12.5)));
             if let Some(side) = preview(ui, l, fill, target) {
                 l.toggle(side);
@@ -764,8 +786,21 @@ fn draw_line(p: &egui::Painter, [a, b]: [egui::Pos2; 2], style: BorderStyle, wid
                 (0..=n.min(400)).map(|i| a + dir * (len * i as f32 / n as f32) + normal * if i % 2 == 0 { -1.5 } else { 1.5 }).collect();
             p.add(egui::Shape::line(pts, Stroke::new(1.0, color)));
         }
-        BorderStyle::Single | BorderStyle::Thick => {
-            p.line_segment([a, b], if style == BorderStyle::Thick { Stroke::new((px * 1.5).min(6.0), color) } else { stroke });
+        BorderStyle::Thick => {
+            p.line_segment([a, b], Stroke::new((px * 1.5).min(6.0), color));
+        }
+        // A compound thin and thick line shows as one line of its width, as on the page.
+        BorderStyle::Single
+        | BorderStyle::ThinThickSmallGap
+        | BorderStyle::ThickThinSmallGap
+        | BorderStyle::ThinThickThinSmallGap
+        | BorderStyle::ThinThickMediumGap
+        | BorderStyle::ThickThinMediumGap
+        | BorderStyle::ThinThickThinMediumGap
+        | BorderStyle::ThinThickLargeGap
+        | BorderStyle::ThickThinLargeGap
+        | BorderStyle::ThinThickThinLargeGap => {
+            p.line_segment([a, b], stroke);
         }
     }
 }
@@ -820,6 +855,91 @@ mod tests {
         // Unchanged, OK runs nothing.
         let f = BordersForm::read(&app, 0).unwrap_or_else(|| panic!("form"));
         assert!(f.commands().is_empty());
+    }
+
+    #[test]
+    fn borders_dialog_preserves_side_shadow_and_frame_flags() {
+        let mut app = app_with("Border flags");
+        let _ = app.run(
+            "para.borders",
+            json!({"sides": {
+                "top": {"style": "single", "shadow": false, "frame": true},
+                "right": {"style": "single", "shadow": true, "frame": false}
+            }}),
+        );
+        let _ = app.run("para.borders", json!({}));
+        let Some(Dialog::Borders { form }) = app.dialog.take() else { panic!("Borders and Shading opens from the menu item") };
+        let mut form = *form;
+        form.para.width = 1.0;
+        form.apply(&mut app);
+
+        let props = app.session.doc.para_at(&app.session.sel.focus).map(|p| p.props.clone()).unwrap_or_default();
+        let borders = props.borders.unwrap_or_default();
+        assert_eq!(borders.top.and_then(|side| side.shadow), Some(false));
+        assert_eq!(borders.top.and_then(|side| side.frame), Some(true));
+        assert_eq!(borders.right.and_then(|side| side.shadow), Some(true));
+        assert_eq!(borders.right.and_then(|side| side.frame), Some(false));
+    }
+
+    #[test]
+    fn borders_dialog_preserves_style_border_flags() {
+        let mut app = app_with("Styled border");
+        let mut border = Border::single(0.5);
+        border.shadow = Some(true);
+        border.frame = Some(false);
+        std::sync::Arc::make_mut(&mut app.session.doc.styles).get_mut("Normal").expect("built-in Normal style").para.borders =
+            Some(Borders { top: Some(border), ..Default::default() });
+
+        let Some(mut form) = BordersForm::read(&app, 0) else { panic!("Borders dialog opens") };
+        form.para.width = 1.0;
+        form.apply(&mut app);
+
+        let props = app.session.doc.para_at(&app.session.sel.focus).map(|p| p.props.clone()).unwrap_or_default();
+        let border = props.borders.and_then(|b| b.top).expect("edited direct border");
+        assert_eq!((border.shadow, border.frame), (Some(true), Some(false)));
+    }
+
+    #[test]
+    fn borders_dialog_preserves_character_style_flags_for_text_edits() {
+        let mut app = app_with("Border flags");
+        let mut border = Border::single(0.5);
+        border.shadow = Some(true);
+        border.frame = Some(false);
+        std::sync::Arc::make_mut(&mut app.session.doc.styles).get_mut("Emphasis").expect("built-in character style").chr.border = Some(border);
+        let _ = app.run("para.borders", json!({"sides": {"top": {"style": "single"}}}));
+        let _ = app.run("select.text", json!({"text": "Border flags"}));
+        let _ = app.run("format.set", json!({"props": {"style": "Emphasis"}}));
+        let _ = app.run("para.borders", json!({}));
+        let Some(Dialog::Borders { form }) = app.dialog.take() else { panic!("Borders and Shading opens") };
+        let mut form = *form;
+        form.to_text = true;
+        form.para.width = 1.0;
+        form.apply(&mut app);
+
+        let border = app.session.doc.para_at(&app.session.sel.focus).and_then(|p| p.props_at(app.session.sel.focus.off).border).unwrap_or_default();
+        assert_eq!((border.shadow, border.frame), (Some(true), Some(false)));
+    }
+
+    #[test]
+    fn borders_dialog_uses_text_border_flags_for_text_edits() {
+        let mut app = app_with("Border flags");
+        let _ = app.run("para.borders", json!({"sides": {"top": {"style": "single", "shadow": true, "frame": false}}}));
+        let _ = app.run("select.text", json!({"text": "Border flags"}));
+        let _ = app.run(
+            "format.set",
+            json!({"props": {"border": {
+                "style": "single", "width": 0.5, "shadow": false, "frame": true
+            }}}),
+        );
+        let _ = app.run("para.borders", json!({}));
+        let Some(Dialog::Borders { form }) = app.dialog.take() else { panic!("Borders and Shading opens without params") };
+        let mut form = *form;
+        form.to_text = true;
+        form.para.width = 1.0;
+        form.apply(&mut app);
+
+        let border = app.session.doc.para_at(&app.session.sel.focus).and_then(|p| p.props_at(app.session.sel.focus.off).border).unwrap_or_default();
+        assert_eq!((border.width, border.shadow, border.frame), (1.0, Some(false), Some(true)));
     }
 
     /// #320: the Tabs dialog opens from the Paragraph dialog's command path, and the table's

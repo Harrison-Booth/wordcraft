@@ -23,12 +23,15 @@ mod para_props;
 mod table_props;
 
 pub use char_props::{
-    CharProps, CombineBrackets, DEFAULT_FONT_SIZE, EastAsianLayout, Highlight, Ligatures, NumChange, PropChange, Underline, VertAlign,
+    CharProps, CombineBrackets, DEFAULT_FONT_SIZE, EastAsianLayout, EmphasisMark, Highlight, Ligatures, NumChange, PropChange, Underline, VertAlign,
 };
 pub use color::{Rgb, TextColor};
-pub use para_props::{Align, Border, BorderStyle, Borders, LineSpacing, NumRef, ParaProps, TAB_POS_EPS, TabAlign, TabLeader, TabStop, TextFrame};
+pub use para_props::{
+    Align, Border, BorderStyle, Borders, LineSpacing, NumRef, ParaProps, TAB_POS_EPS, TabAlign, TabLeader, TabStop, TextAlignment, TextFrame,
+};
 pub use table_props::{
-    CellProps, HeightRule, RowProps, TableFloat, TableLook, TableProps, TextDirection, TextVert, VAlign, VMerge, anchor_ooxml, valign_from_anchor,
+    CellPicture, CellProps, HeightRule, PictureRepeat, RowProps, TableFloat, TableLook, TableProps, TextDirection, TextVert, VAlign, VMerge,
+    anchor_ooxml, valign_from_anchor,
 };
 
 #[cfg(test)]
@@ -67,7 +70,7 @@ mod tests {
     fn borders_overlay_per_side() {
         let thin = Border::single(0.5);
         let thick = Border::single(2.0);
-        let nil = Border { style: BorderStyle::None, width: 0.0, color: None, space: 0.0 };
+        let nil = Border { style: BorderStyle::None, width: 0.0, color: None, space: 0.0, ..Default::default() };
         let mut b = Borders::all(thin);
         b.overlay(&Borders { top: Some(thick), ..Default::default() });
         assert_eq!(b.top, Some(thick));

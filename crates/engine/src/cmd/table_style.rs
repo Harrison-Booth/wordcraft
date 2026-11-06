@@ -112,7 +112,7 @@ fn build_new(s: &Session, v: &Value) -> Result<Style, CmdError> {
 fn new_style(s: &mut Session, v: &Value) -> CmdResult {
     let st = build_new(s, v)?;
     let id = st.id.clone();
-    s.doc.styles.upsert(st);
+    Arc::make_mut(&mut s.doc.styles).upsert(st);
     s.dirty = true;
     if p::bool(v, "apply").unwrap_or(true) {
         apply(s, &id)?;
@@ -131,7 +131,7 @@ fn target(s: &Session, v: &Value) -> Result<String, CmdError> {
 fn modify_style(s: &mut Session, v: &Value) -> CmdResult {
     let st = build_modified(s, v)?;
     let id = st.id.clone();
-    s.doc.styles.upsert(st);
+    Arc::make_mut(&mut s.doc.styles).upsert(st);
     s.dirty = true;
     if p::bool(v, "apply").unwrap_or(false) {
         apply(s, &id)?;
@@ -189,7 +189,7 @@ pub fn preview(s: &Session, v: &Value) -> Option<TableStyleProps> {
         build_new(s, &v).ok()?
     };
     let id = st.id.clone();
-    let mut sheet = s.doc.styles.clone();
+    let mut sheet = (*s.doc.styles).clone();
     sheet.upsert(st);
     sheet.table_style(&id)
 }
@@ -214,7 +214,7 @@ pub fn delete(s: &mut Session, id: &str) -> CmdResult {
         return Err(CmdError::Failed(format!("`{}` is a built-in table style and can't be deleted", st.name)));
     }
     let mut rebased = Vec::new();
-    for child in s.doc.styles.styles.iter_mut().filter(|c| c.based_on.as_deref() == Some(id.as_str())) {
+    for child in Arc::make_mut(&mut s.doc.styles).styles.iter_mut().filter(|c| c.based_on.as_deref() == Some(id.as_str())) {
         let mut para = st.para.clone();
         para.overlay(&child.para);
         child.para = para;
@@ -231,7 +231,7 @@ pub fn delete(s: &mut Session, id: &str) -> CmdResult {
         child.based_on = st.based_on.clone();
         rebased.push(child.id.clone());
     }
-    s.doc.styles.styles.retain(|x| x.id != id);
+    Arc::make_mut(&mut s.doc.styles).styles.retain(|x| x.id != id);
     let fallback = table_style_id(s, "TableGrid");
     let mut tables = restyle(&mut s.doc.body, &id, fallback.as_deref(), 0);
     for part in s.doc.parts.values_mut() {
@@ -357,7 +357,7 @@ fn color_param(r: &Value, k: &str) -> Result<Option<Rgb>, CmdError> {
 }
 
 /// An explicit "no border" edge (`w:val="nil"`), which hides what a lower part draws.
-const NO_LINE: Border = Border { style: BorderStyle::None, width: 0.0, color: None, space: 0.0 };
+const NO_LINE: Border = Border { style: BorderStyle::None, width: 0.0, color: None, space: 0.0, shadow: None, frame: None };
 
 /// The border styles by param name.
 const LINE_STYLES: [(&str, BorderStyle); 9] = [
@@ -408,7 +408,8 @@ fn edges_param(e: &Value, b: &mut Borders) -> Result<(), CmdError> {
         Some(_) => return Err(CmdError::Params("border `style` is a name".into())),
     };
     let width = p::f32(e, "width").unwrap_or(0.5).clamp(0.25, 6.0);
-    let line = if style == BorderStyle::None { NO_LINE } else { Border { style, width, color: color_param(e, "color")?, space: 0.0 } };
+    let line =
+        if style == BorderStyle::None { NO_LINE } else { Border { style, width, color: color_param(e, "color")?, space: 0.0, ..Default::default() } };
     let edges = match e.get("edges") {
         None => "all",
         Some(Value::String(n)) => n.as_str(),
@@ -520,7 +521,13 @@ fn region(r: &Value, f: &mut PartFormat) -> Result<(), CmdError> {
     match r.get("borders") {
         Some(Value::Bool(true)) => {
             let width = p::f32(r, "borderWidth").unwrap_or(0.5).clamp(0.25, 6.0);
-            f.borders = Some(Borders::all(Border { style: BorderStyle::Single, width, color: color_param(r, "borderColor")?, space: 0.0 }));
+            f.borders = Some(Borders::all(Border {
+                style: BorderStyle::Single,
+                width,
+                color: color_param(r, "borderColor")?,
+                space: 0.0,
+                ..Default::default()
+            }));
         }
         Some(Value::Bool(false)) => f.borders = Some(Borders::all(NO_LINE)),
         Some(Value::Null) => f.borders = None,

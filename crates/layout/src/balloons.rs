@@ -44,6 +44,9 @@ const MAX_PARENT_CHAIN: usize = 64;
 /// Path given to the synthetic author-name paragraphs: no paragraph of the comment's story has it.
 const HEADER_PATH: u32 = u32::MAX;
 
+#[cfg(test)]
+mod anchor_tests;
+
 /// One comment's balloon before it is positioned: items relative to the card's top-left.
 struct Card {
     page: usize,
@@ -59,6 +62,7 @@ struct Card {
 fn root(doc: &Document, id: u32) -> u32 {
     let mut cur = id;
     for _ in 0..MAX_PARENT_CHAIN {
+        crate::work::steps(1);
         match doc.comments.get(&cur).and_then(|c| c.parent) {
             Some(p) if p != cur && doc.comments.contains_key(&p) => cur = p,
             _ => break,
@@ -74,8 +78,9 @@ pub fn anchors(doc: &Document) -> Vec<(u32, Pos)> {
     let mut out = Vec::new();
     for path in doc.para_paths(StoryRef::Body) {
         let Some(p) = doc.para(StoryRef::Body, &path) else { continue };
-        for off in p.object_offsets() {
-            let Some(InlineObject::CommentStart { id }) = p.object_at(off) else { continue };
+        for (off, object) in p.objects_with_offsets() {
+            let InlineObject::CommentStart { id } = object else { continue };
+            crate::work::steps(1);
             if !doc.comments.contains_key(id) || root(doc, *id) != *id || !seen.insert(*id) {
                 continue;
             }
@@ -138,7 +143,7 @@ pub(crate) fn add(ctx: &mut Ctx, lay: &mut DocLayout) {
             if k > 0 {
                 // A reply starts: a hairline between it and what it answers.
                 y += 3.0;
-                let border = Border { style: BorderStyle::Single, width: 0.25, color: Some(Rgb(0xC8, 0xC8, 0xC8)), space: 0.0 };
+                let border = Border { style: BorderStyle::Single, width: 0.25, color: Some(Rgb(0xC8, 0xC8, 0xC8)), space: 0.0, ..Default::default() };
                 items.push(Placed::Rule { x0: x, y0: y, x1: x + inner, y1: y, border });
                 y += 3.0;
             }
@@ -205,7 +210,7 @@ pub(crate) fn add(ctx: &mut Ctx, lay: &mut DocLayout) {
             let avail = bottom - top;
             let (items, h) = if c.h > avail { (fit_box(c.items, avail - PAD), avail) } else { (c.items, c.h) };
             next = top + h + GAP;
-            let line = |style, width: f32| Border { style, width, color: Some(c.color), space: 0.0 };
+            let line = |style, width: f32| Border { style, width, color: Some(c.color), space: 0.0, ..Default::default() };
             // Leader: along the text from the anchor to the page edge, then to the card.
             page.items.push(Placed::Rule { x0: c.ax, y0: c.ay, x1: pw, y1: c.ay, border: line(BorderStyle::Dashed, 0.5) });
             page.items.push(Placed::Rule { x0: pw, y0: c.ay, x1: x0, y1: top + 8.0, border: line(BorderStyle::Single, 0.5) });
