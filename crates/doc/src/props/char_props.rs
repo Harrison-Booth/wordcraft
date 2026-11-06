@@ -223,6 +223,37 @@ impl Highlight {
     }
 }
 
+/// Floating-object side cleared by a text-wrapping line break (`w:br/@w:clear`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum BreakClear {
+    None,
+    Left,
+    Right,
+    All,
+}
+
+impl BreakClear {
+    pub fn from_ooxml(value: &str) -> Option<Self> {
+        match value {
+            "none" => Some(Self::None),
+            "left" => Some(Self::Left),
+            "right" => Some(Self::Right),
+            "all" => Some(Self::All),
+            _ => None,
+        }
+    }
+
+    pub fn ooxml(self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::Left => "left",
+            Self::Right => "right",
+            Self::All => "all",
+        }
+    }
+}
+
 /// The text size, in points, of a run whose size no style or default sets.
 pub const DEFAULT_FONT_SIZE: f32 = 11.0;
 
@@ -230,6 +261,9 @@ pub const DEFAULT_FONT_SIZE: f32 = 11.0;
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct CharProps {
+    /// Floating-object clearing for this manual text-wrapping break; not run formatting.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub break_clear: Option<BreakClear>,
     /// Character style id.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub style: Option<String>,
@@ -291,6 +325,10 @@ pub struct CharProps {
     /// Kerning for fonts at or above this size (points); 0 = off.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub kern: Option<f32>,
+    /// A mark over (or under) each character (`w:em`, Font › Emphasis mark), as East Asian text
+    /// stresses words; `Some(EmphasisMark::None)` turns off one a style sets.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub emphasis: Option<EmphasisMark>,
     /// OpenType ligatures (`w14:ligatures`). `None` leaves WordCraft's default: standard and
     /// contextual ligatures.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -381,6 +419,41 @@ pub struct EastAsianLayout {
     pub vert_compress: Option<bool>,
 }
 
+/// A mark over or under each character (`ST_Em`, ECMA-376 §17.18.24): Word's Font › Emphasis
+/// mark.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum EmphasisMark {
+    #[default]
+    None,
+    /// A dot above.
+    Dot,
+    /// A comma (sesame) above.
+    Comma,
+    /// A hollow circle above.
+    Circle,
+    /// A dot below.
+    UnderDot,
+}
+
+impl EmphasisMark {
+    pub const ALL: [EmphasisMark; 5] = [EmphasisMark::None, EmphasisMark::Dot, EmphasisMark::Comma, EmphasisMark::Circle, EmphasisMark::UnderDot];
+    /// OOXML `w:em` value.
+    pub fn ooxml(self) -> &'static str {
+        match self {
+            EmphasisMark::None => "none",
+            EmphasisMark::Dot => "dot",
+            EmphasisMark::Comma => "comma",
+            EmphasisMark::Circle => "circle",
+            EmphasisMark::UnderDot => "underDot",
+        }
+    }
+    /// The mark an OOXML `w:em` value names; unknown values are none.
+    pub fn from_ooxml(v: &str) -> EmphasisMark {
+        EmphasisMark::ALL.into_iter().find(|m| m.ooxml() == v.trim()).unwrap_or_default()
+    }
+}
+
 /// Brackets around two lines in one (`ST_CombineBrackets`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -466,7 +539,7 @@ impl CharProps {
     }
 
     fn minus_run_visibility(&mut self, base: &CharProps) {
-        drop_same_fields!(self, base; web_hidden, snap_to_grid);
+        drop_same_fields!(self, base; web_hidden, snap_to_grid, emphasis);
     }
 
     fn minus_script_style(&mut self, base: &CharProps) {
@@ -474,7 +547,7 @@ impl CharProps {
     }
 
     fn minus_document_marks(&mut self, base: &CharProps) {
-        drop_same_fields!(self, base; link, ins, del, ligatures);
+        drop_same_fields!(self, base; link, ins, del, ligatures, break_clear);
     }
 
     /// Apply every `Some` field of `patch` on top of `self`.
@@ -497,7 +570,7 @@ impl CharProps {
     }
 
     fn overlay_run_visibility(&mut self, patch: &CharProps) {
-        overlay_fields!(self, patch; web_hidden, snap_to_grid);
+        overlay_fields!(self, patch; web_hidden, snap_to_grid, emphasis);
     }
 
     fn overlay_script_style(&mut self, patch: &CharProps) {
@@ -505,7 +578,7 @@ impl CharProps {
     }
 
     fn overlay_document_marks(&mut self, patch: &CharProps) {
-        overlay_fields!(self, patch; link, ins, del, fmt_change, ligatures);
+        overlay_fields!(self, patch; link, ins, del, fmt_change, ligatures, break_clear);
     }
     pub fn overlaid(mut self, patch: &CharProps) -> CharProps {
         self.overlay(patch);
@@ -529,6 +602,7 @@ impl CharProps {
     /// is cleared too, as Word's Clear Formatting does).
     pub fn cleared(&self) -> CharProps {
         CharProps {
+            break_clear: self.break_clear,
             link: self.link.clone(),
             ins: self.ins,
             del: self.del,
@@ -541,5 +615,16 @@ impl CharProps {
     /// Just the formatting: without the link, revision marks and tracked formatting change.
     pub fn formatting(&self) -> CharProps {
         CharProps { link: None, ins: None, del: None, fmt_change: None, ..self.clone() }
+    }
+}
+
+#[cfg(test)]
+mod formatting_tests {
+    use super::{BreakClear, CharProps};
+
+    #[test]
+    fn formatting_keeps_break_clear() {
+        let props = CharProps { break_clear: Some(BreakClear::Left), ..Default::default() };
+        assert_eq!(props.formatting().break_clear, Some(BreakClear::Left));
     }
 }

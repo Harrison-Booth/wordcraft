@@ -7,7 +7,7 @@ use wordcraft_doc::control::{ContentControl, ControlWrap};
 use wordcraft_doc::effects::{Glow, Shadow, ShapeEffects};
 use wordcraft_doc::graphic::{Embedded, Graphic, GraphicItem, GraphicKind};
 use wordcraft_doc::para::{AltText, Anchor, Float, FloatAlign, NoteKind, PTabAlign, PTabBase, ShapeKind, Wrap, WrapText, cap_alt};
-use wordcraft_doc::props::{CharProps, NumChange, PropChange, Rgb, TextColor};
+use wordcraft_doc::props::{BreakClear, CharProps, NumChange, PropChange, Rgb, TextColor};
 use wordcraft_doc::table::{Cell, MAX_COLS, MAX_ROWS, Row, Table};
 use wordcraft_doc::{Block, Blocks, InlineObject, Paragraph, PartKind, RevisionKind, Run, para_block};
 
@@ -166,9 +166,9 @@ fn children_of_choice(ac: &El) -> Option<&El> {
     ac.children("mc:Choice").find(|c| ok(c)).or_else(|| ac.child("mc:Fallback")).or_else(|| ac.child("mc:Choice"))
 }
 
-/// Gather `name` children (rows, cells), looking through `w:sdt`/`w:customXml` wrappers; each
-/// with the content controls that open before it and how many close after it. `pending` holds
-/// controls opened but not yet given to an element.
+/// Gather `name` children (rows, cells), looking through content controls, custom XML and the
+/// selected alternate-content branch; each with the content controls that open before it and how
+/// many close after it. `pending` holds controls opened but not yet given to an element.
 fn collect<'a>(e: &'a El, name: &str, out: &mut Vec<(&'a El, ControlWrap)>, pending: &mut Vec<ContentControl>, depth: usize) {
     if depth > 8 {
         return;
@@ -194,6 +194,10 @@ fn collect<'a>(e: &'a El, name: &str, out: &mut Vec<(&'a El, ControlWrap)>, pend
             }
         } else if k.name == "w:customXml" {
             collect(k, name, out, pending, depth + 1);
+        } else if k.name == "mc:AlternateContent"
+            && let Some(branch) = children_of_choice(k)
+        {
+            collect(branch, name, out, pending, depth + 1);
         }
     }
 }
